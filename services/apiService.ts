@@ -8,7 +8,7 @@ let API_BASE_URL = __DEV__
   ? 'http://localhost:3000/api' 
   : 'https://your-production-api.com/api';
 
-const API_TIMEOUT = 10000; // 10 seconds
+const API_TIMEOUT = 15000; // 15 seconds for production
 
 interface ApiResponse<T> {
   success: boolean;
@@ -19,6 +19,7 @@ interface ApiResponse<T> {
 
 class ApiService {
   private authToken: string | null = null;
+  private isInitialized = false;
 
   constructor() {
     this.initializeAuth();
@@ -27,9 +28,11 @@ class ApiService {
   private async initializeAuth() {
     try {
       this.authToken = await SecureStore.getItemAsync('auth_token');
+      this.isInitialized = true;
       console.log('Auth token initialized:', !!this.authToken);
     } catch (error) {
       console.error('Failed to initialize auth:', error);
+      this.isInitialized = true;
     }
   }
 
@@ -43,12 +46,21 @@ class ApiService {
     return API_BASE_URL;
   }
 
+  private async waitForInitialization(): Promise<void> {
+    while (!this.isInitialized) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
   private async getHeaders(): Promise<Record<string, string>> {
+    await this.waitForInitialization();
+    
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'X-Client-Version': '1.0.0',
       'X-Platform': 'mobile',
+      'X-App-Name': 'TontineApp',
     };
 
     if (this.authToken) {
@@ -69,7 +81,7 @@ class ApiService {
       const url = `${API_BASE_URL}${endpoint}`;
       const headers = await this.getHeaders();
 
-      console.log(`Making API request to: ${url}`);
+      console.log(`🌐 API Request: ${options.method || 'GET'} ${url}`);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
@@ -95,7 +107,7 @@ class ApiService {
       }
 
       if (!response.ok) {
-        console.error('API Error:', response.status, data);
+        console.error('❌ API Error:', response.status, data);
         
         // Handle specific error codes
         if (response.status === 401) {
@@ -107,25 +119,53 @@ class ApiService {
           };
         }
         
+        if (response.status === 403) {
+          return {
+            success: false,
+            error: 'Accès non autorisé',
+          };
+        }
+        
+        if (response.status === 404) {
+          return {
+            success: false,
+            error: 'Ressource non trouvée',
+          };
+        }
+        
+        if (response.status >= 500) {
+          return {
+            success: false,
+            error: 'Erreur serveur, veuillez réessayer plus tard',
+          };
+        }
+        
         return {
           success: false,
-          error: data.message || data.error || `HTTP ${response.status}`,
+          error: data.message || data.error || `Erreur HTTP ${response.status}`,
         };
       }
 
-      console.log('API Success:', endpoint);
+      console.log('✅ API Success:', endpoint);
       return {
         success: true,
         data: data.data || data,
       };
     } catch (error) {
-      console.error('Network error:', error);
+      console.error('🔥 Network error:', error);
       
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           return {
             success: false,
-            error: 'Délai d\'attente dépassé',
+            error: 'Délai d\'attente dépassé. Vérifiez votre connexion.',
+          };
+        }
+        
+        if (error.message.includes('Network request failed')) {
+          return {
+            success: false,
+            error: 'Pas de connexion internet. Vérifiez votre réseau.',
           };
         }
         
@@ -137,26 +177,39 @@ class ApiService {
       
       return {
         success: false,
-        error: 'Erreur de connexion',
+        error: 'Erreur de connexion inconnue',
       };
     }
   }
 
   // Health check endpoint
-  async healthCheck(): Promise<ApiResponse<{ status: string; timestamp: string }>> {
+  async healthCheck(): Promise<ApiResponse<{ status: string; timestamp: string; version: string }>> {
     return this.makeRequest('/health');
   }
 
+  // Test connection with timeout
+  async testConnection(): Promise<boolean> {
+    try {
+      console.log('🔍 Testing API connection...');
+      const response = await this.healthCheck();
+      console.log('🔍 Connection test result:', response.success);
+      return response.success;
+    } catch (error) {
+      console.error('🔍 Connection test failed:', error);
+      return false;
+    }
+  }
+
   // Authentication
-  async login(phoneNumber: string): Promise<ApiResponse<{ otpSent: boolean }>> {
+  async login(phoneNumber: string): Promise<ApiResponse<{ otpSent: boolean; expiresIn: number }>> {
     return this.makeRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ phoneNumber }),
     });
   }
 
-  async verifyOtp(phoneNumber: string, otp: string): Promise<ApiResponse<{ user: User; token: string }>> {
-    const response = await this.makeRequest<{ user: User; token: string }>('/auth/verify-otp', {
+  async verifyOtp(phoneNumber: string, otp: string): Promise<ApiResponse<{ user: User; token: string; refreshToken: string }>> {
+    const response = await this.makeRequest<{ user: User; token: string; refreshToken: string }>('/auth/verify-otp', {
       method: 'POST',
       body: JSON.stringify({ phoneNumber, otp }),
     });
@@ -164,25 +217,43 @@ class ApiService {
     if (response.success && response.data) {
       this.authToken = response.data.token;
       await SecureStore.setItemAsync('auth_token', response.data.token);
+      await SecureStore.setItemAsync('refresh_token', response.data.refreshToken);
       await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
-      console.log('User authenticated and stored');
+      console.log('✅ User authenticated and stored');
     }
 
     return response;
   }
 
-  async refreshToken(): Promise<ApiResponse<{ token: string }>> {
-    const response = await this.makeRequest<{ token: string }>('/auth/refresh', {
-      method: 'POST',
-    });
+  async refreshToken(): Promise<ApiResponse<{ token: string; refreshToken: string }>> {
+    try {
+      const refreshToken = await SecureStore.getItemAsync('refresh_token');
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
 
-    if (response.success && response.data) {
-      this.authToken = response.data.token;
-      await SecureStore.setItemAsync('auth_token', response.data.token);
-      console.log('Token refreshed');
+      const response = await this.makeRequest<{ token: string; refreshToken: string }>('/auth/refresh', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${refreshToken}`,
+        },
+      });
+
+      if (response.success && response.data) {
+        this.authToken = response.data.token;
+        await SecureStore.setItemAsync('auth_token', response.data.token);
+        await SecureStore.setItemAsync('refresh_token', response.data.refreshToken);
+        console.log('✅ Token refreshed successfully');
+      }
+
+      return response;
+    } catch (error) {
+      console.error('❌ Token refresh failed:', error);
+      return {
+        success: false,
+        error: 'Impossible de renouveler la session',
+      };
     }
-
-    return response;
   }
 
   async logout(): Promise<void> {
@@ -193,11 +264,12 @@ class ApiService {
       }
       
       await SecureStore.deleteItemAsync('auth_token');
+      await SecureStore.deleteItemAsync('refresh_token');
       await AsyncStorage.removeItem('user');
       this.authToken = null;
-      console.log('User logged out');
+      console.log('✅ User logged out successfully');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('❌ Logout error:', error);
     }
   }
 
@@ -216,6 +288,23 @@ class ApiService {
   async deleteAccount(): Promise<ApiResponse<void>> {
     return this.makeRequest('/user/account', {
       method: 'DELETE',
+    });
+  }
+
+  async uploadProfilePicture(imageUri: string): Promise<ApiResponse<{ imageUrl: string }>> {
+    const formData = new FormData();
+    formData.append('profile_picture', {
+      uri: imageUri,
+      type: 'image/jpeg',
+      name: 'profile.jpg',
+    } as any);
+
+    return this.makeRequest('/user/profile-picture', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
   }
 
@@ -272,6 +361,12 @@ class ApiService {
     return this.makeRequest(`/tontines/${tontineId}/members`);
   }
 
+  async generateInviteLink(tontineId: string): Promise<ApiResponse<{ inviteLink: string; inviteCode: string }>> {
+    return this.makeRequest(`/tontines/${tontineId}/invite-link`, {
+      method: 'POST',
+    });
+  }
+
   // Payment Management
   async initiatePayment(tontineId: string, paymentMethod: 'orange' | 'mtn' | 'wave'): Promise<ApiResponse<{ paymentUrl: string; transactionId: string }>> {
     return this.makeRequest('/payments/initiate', {
@@ -300,6 +395,10 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });
+  }
+
+  async getPaymentMethods(): Promise<ApiResponse<Array<{ id: string; name: string; enabled: boolean }>>> {
+    return this.makeRequest('/payments/methods');
   }
 
   // Notifications
@@ -342,17 +441,34 @@ class ApiService {
     return this.makeRequest('/user/analytics');
   }
 
+  async getSystemAnalytics(): Promise<ApiResponse<any>> {
+    return this.makeRequest('/analytics/system');
+  }
+
   // Admin endpoints (if user has admin role)
   async getSystemStats(): Promise<ApiResponse<any>> {
     return this.makeRequest('/admin/stats');
   }
 
-  async getAllUsers(): Promise<ApiResponse<User[]>> {
-    return this.makeRequest('/admin/users');
+  async getAllUsers(page = 1, limit = 50): Promise<ApiResponse<{ users: User[]; total: number; page: number }>> {
+    return this.makeRequest(`/admin/users?page=${page}&limit=${limit}`);
   }
 
-  async getAllTontines(): Promise<ApiResponse<Tontine[]>> {
-    return this.makeRequest('/admin/tontines');
+  async getAllTontines(page = 1, limit = 50): Promise<ApiResponse<{ tontines: Tontine[]; total: number; page: number }>> {
+    return this.makeRequest(`/admin/tontines?page=${page}&limit=${limit}`);
+  }
+
+  async suspendUser(userId: string, reason: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/admin/users/${userId}/suspend`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async unsuspendUser(userId: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/admin/users/${userId}/unsuspend`, {
+      method: 'POST',
+    });
   }
 
   // Utility methods
@@ -360,13 +476,66 @@ class ApiService {
     return !!this.authToken;
   }
 
-  async testConnection(): Promise<boolean> {
+  async getConnectionQuality(): Promise<'excellent' | 'good' | 'poor' | 'offline'> {
     try {
+      const startTime = Date.now();
       const response = await this.healthCheck();
-      return response.success;
+      const endTime = Date.now();
+      const latency = endTime - startTime;
+
+      if (!response.success) return 'offline';
+      if (latency < 200) return 'excellent';
+      if (latency < 500) return 'good';
+      return 'poor';
     } catch (error) {
-      return false;
+      return 'offline';
     }
+  }
+
+  // Configuration for production
+  async validateApiConfiguration(): Promise<{
+    isValid: boolean;
+    issues: string[];
+    recommendations: string[];
+  }> {
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+
+    // Check if using placeholder URL
+    if (API_BASE_URL.includes('your-production-api.com')) {
+      issues.push('API URL is still using placeholder');
+      recommendations.push('Update API_BASE_URL to your actual production server');
+    }
+
+    // Check if using localhost in production
+    if (!__DEV__ && API_BASE_URL.includes('localhost')) {
+      issues.push('Using localhost URL in production build');
+      recommendations.push('Use a public domain for production API');
+    }
+
+    // Check HTTPS in production
+    if (!__DEV__ && !API_BASE_URL.startsWith('https://')) {
+      issues.push('API URL is not using HTTPS in production');
+      recommendations.push('Use HTTPS for secure communication');
+    }
+
+    // Test connection
+    try {
+      const isConnected = await this.testConnection();
+      if (!isConnected) {
+        issues.push('Cannot connect to API server');
+        recommendations.push('Verify server is running and accessible');
+      }
+    } catch (error) {
+      issues.push('API connection test failed');
+      recommendations.push('Check network connectivity and server status');
+    }
+
+    return {
+      isValid: issues.length === 0,
+      issues,
+      recommendations,
+    };
   }
 }
 

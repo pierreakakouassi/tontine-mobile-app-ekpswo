@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, Linking, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { router } from 'expo-router';
@@ -8,6 +8,7 @@ import { commonStyles, colors } from '../styles/commonStyles';
 import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import { notificationService } from '../services/notificationService';
+import { productionService } from '../services/productionService';
 
 interface ProductionStep {
   id: string;
@@ -23,11 +24,20 @@ export default function ProductionGuideScreen() {
   const { authState } = useAuth();
   const [steps, setSteps] = useState<ProductionStep[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [apiUrl, setApiUrl] = useState('');
+  const [showApiUrlInput, setShowApiUrlInput] = useState(false);
+  const [healthStatus, setHealthStatus] = useState<any>(null);
 
   useEffect(() => {
     initializeSteps();
     checkCurrentStatus();
+    loadCurrentApiUrl();
   }, []);
+
+  const loadCurrentApiUrl = async () => {
+    const config = productionService.getConfig();
+    setApiUrl(config.apiBaseUrl);
+  };
 
   const initializeSteps = () => {
     const productionSteps: ProductionStep[] = [
@@ -48,7 +58,7 @@ export default function ProductionGuideScreen() {
         status: 'pending',
         priority: 'high',
         category: 'backend',
-        action: () => showApiUrlGuide(),
+        action: () => setShowApiUrlInput(true),
       },
       {
         id: 'database-setup',
@@ -181,22 +191,45 @@ export default function ProductionGuideScreen() {
   };
 
   const checkCurrentStatus = async () => {
-    // Check API connection
     try {
-      const response = await apiService.getCurrentUser();
-      updateStepStatus('api-url-update', response.success ? 'completed' : 'error');
-    } catch (error) {
-      console.log('API check failed:', error);
-      updateStepStatus('api-url-update', 'error');
-    }
+      // Perform health check
+      const health = await productionService.performHealthCheck();
+      setHealthStatus(health);
 
-    // Check notification permissions
-    try {
-      const result = await notificationService.initialize();
-      updateStepStatus('expo-notifications', result.success ? 'completed' : 'error');
+      // Update step statuses based on health check
+      health.checks.forEach(check => {
+        if (check.name === 'API Connectivity') {
+          updateStepStatus('api-url-update', check.status === 'pass' ? 'completed' : 'error');
+        }
+        if (check.name === 'Push Notifications') {
+          updateStepStatus('expo-notifications', check.status === 'pass' ? 'completed' : 'error');
+        }
+        if (check.name === 'Payment Providers') {
+          const status = check.status === 'pass' ? 'completed' : 'pending';
+          updateStepStatus('orange-api', status);
+          updateStepStatus('mtn-api', status);
+          updateStepStatus('wave-api', status);
+        }
+      });
+
+      // Check deployment checklist
+      const checklist = productionService.getDeploymentChecklist();
+      checklist.forEach(item => {
+        if (item.id === 'api-url') {
+          updateStepStatus('api-url-update', item.completed ? 'completed' : 'pending');
+        }
+        if (item.id === 'payment-providers') {
+          const status = item.completed ? 'completed' : 'pending';
+          updateStepStatus('orange-api', status);
+          updateStepStatus('mtn-api', status);
+          updateStepStatus('wave-api', status);
+        }
+        if (item.id === 'notifications') {
+          updateStepStatus('expo-notifications', item.completed ? 'completed' : 'pending');
+        }
+      });
     } catch (error) {
-      console.log('Notification check failed:', error);
-      updateStepStatus('expo-notifications', 'error');
+      console.error('Status check failed:', error);
     }
   };
 
@@ -206,34 +239,50 @@ export default function ProductionGuideScreen() {
     ));
   };
 
+  const updateApiUrl = async () => {
+    try {
+      if (!apiUrl || !apiUrl.startsWith('http')) {
+        Alert.alert('Erreur', 'Veuillez entrer une URL valide (http:// ou https://)');
+        return;
+      }
+
+      await productionService.setApiBaseUrl(apiUrl);
+      setShowApiUrlInput(false);
+      
+      // Test the new API URL
+      const isConnected = await apiService.testConnection();
+      updateStepStatus('api-url-update', isConnected ? 'completed' : 'error');
+      
+      Alert.alert(
+        'Succès', 
+        `URL API mise à jour: ${apiUrl}\nConnexion: ${isConnected ? 'Réussie' : 'Échec'}`
+      );
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de mettre à jour l\'URL API');
+    }
+  };
+
   const showBackendGuide = () => {
     Alert.alert(
       'Déploiement Backend',
-      'Options de déploiement recommandées:\n\n' +
+      '🚀 Options de déploiement recommandées:\n\n' +
       '• Heroku (facile, payant)\n' +
       '• DigitalOcean (flexible, abordable)\n' +
-      '• AWS/GCP (scalable, complexe)\n' +
-      '• VPS local (contrôle total)\n\n' +
-      'Assurez-vous d\'avoir:\n' +
-      '• HTTPS activé\n' +
+      '• Railway (moderne, simple)\n' +
+      '• Render (gratuit pour commencer)\n' +
+      '• AWS/GCP (scalable, complexe)\n\n' +
+      '✅ Checklist obligatoire:\n' +
+      '• HTTPS activé (SSL/TLS)\n' +
       '• Variables d\'environnement sécurisées\n' +
+      '• Base de données PostgreSQL\n' +
       '• Monitoring et logs\n' +
-      '• Sauvegardes automatiques',
-      [{ text: 'Compris' }]
-    );
-  };
-
-  const showApiUrlGuide = () => {
-    Alert.alert(
-      'Configuration API URL',
-      'Dans services/apiService.ts, remplacez:\n\n' +
-      'const API_BASE_URL = __DEV__ \n' +
-      '  ? \'http://localhost:3000/api\' \n' +
-      '  : \'https://your-production-api.com/api\';\n\n' +
-      'Par votre URL de production réelle.',
+      '• Sauvegardes automatiques\n' +
+      '• Rate limiting\n' +
+      '• CORS configuré',
       [
         { text: 'Annuler' },
-        { text: 'Ouvrir le fichier', onPress: () => router.push('/settings') }
+        { text: 'Guide Heroku', onPress: () => Linking.openURL('https://devcenter.heroku.com/articles/deploying-nodejs') },
+        { text: 'Guide Railway', onPress: () => Linking.openURL('https://docs.railway.app/deploy/deployments') }
       ]
     );
   };
@@ -241,29 +290,87 @@ export default function ProductionGuideScreen() {
   const showDatabaseGuide = () => {
     Alert.alert(
       'Configuration Base de Données',
-      'Pour PostgreSQL en production:\n\n' +
-      '• Utilisez un service managé (AWS RDS, DigitalOcean)\n' +
-      '• Configurez les sauvegardes automatiques\n' +
-      '• Activez SSL/TLS\n' +
-      '• Configurez la réplication si nécessaire\n' +
-      '• Surveillez les performances',
-      [{ text: 'Compris' }]
+      '🗄️ PostgreSQL en production:\n\n' +
+      '📋 Services recommandés:\n' +
+      '• Supabase (gratuit + payant)\n' +
+      '• AWS RDS (scalable)\n' +
+      '• DigitalOcean Managed DB\n' +
+      '• Railway PostgreSQL\n' +
+      '• Heroku Postgres\n\n' +
+      '⚙️ Configuration requise:\n' +
+      '• SSL/TLS activé\n' +
+      '• Sauvegardes automatiques quotidiennes\n' +
+      '• Monitoring des performances\n' +
+      '• Connection pooling\n' +
+      '• Réplication (optionnel)',
+      [
+        { text: 'Annuler' },
+        { text: 'Supabase', onPress: () => Linking.openURL('https://supabase.com') }
+      ]
     );
   };
 
   const showOrangeApiGuide = () => {
     Alert.alert(
       'API Orange Money',
-      'Étapes pour intégrer Orange Money:\n\n' +
+      '🟠 Intégration Orange Money CI:\n\n' +
+      '📞 Étapes d\'intégration:\n' +
       '1. Contactez Orange Côte d\'Ivoire\n' +
-      '2. Demandez l\'accès à l\'API Orange Money\n' +
-      '3. Obtenez vos clés API (client_id, client_secret)\n' +
-      '4. Testez en mode sandbox\n' +
-      '5. Demandez l\'activation en production\n\n' +
-      'Documentation: developer.orange.com',
+      '   📧 Email: api-support@orange.ci\n' +
+      '   📱 Tel: +225 07 07 07 07\n\n' +
+      '2. Présentez votre projet tontine\n' +
+      '3. Demandez l\'accès API Orange Money\n' +
+      '4. Obtenez vos clés (client_id, client_secret)\n' +
+      '5. Testez en mode sandbox\n' +
+      '6. Demandez l\'activation production\n\n' +
+      '💰 Frais: ~2-3% par transaction\n' +
+      '📚 Documentation: developer.orange.com',
       [
         { text: 'Annuler' },
-        { text: 'Ouvrir le site', onPress: () => Linking.openURL('https://developer.orange.com') }
+        { text: 'Configurer', onPress: () => showOrangeConfig() },
+        { text: 'Documentation', onPress: () => Linking.openURL('https://developer.orange.com') }
+      ]
+    );
+  };
+
+  const showOrangeConfig = () => {
+    Alert.prompt(
+      'Configuration Orange Money',
+      'Entrez votre Client ID Orange Money:',
+      [
+        { text: 'Annuler' },
+        { 
+          text: 'Suivant', 
+          onPress: (clientId) => {
+            if (clientId) {
+              Alert.prompt(
+                'Configuration Orange Money',
+                'Entrez votre Client Secret:',
+                [
+                  { text: 'Annuler' },
+                  { 
+                    text: 'Configurer', 
+                    onPress: async (clientSecret) => {
+                      if (clientSecret) {
+                        try {
+                          await productionService.configureOrangeMoney({
+                            clientId,
+                            clientSecret,
+                            sandboxMode: !productionService.isProduction(),
+                          });
+                          updateStepStatus('orange-api', 'completed');
+                          Alert.alert('Succès', 'Orange Money configuré!');
+                        } catch (error) {
+                          Alert.alert('Erreur', 'Configuration échouée');
+                        }
+                      }
+                    }
+                  }
+                ]
+              );
+            }
+          }
+        }
       ]
     );
   };
@@ -271,17 +378,77 @@ export default function ProductionGuideScreen() {
   const showMtnApiGuide = () => {
     Alert.alert(
       'API MTN Mobile Money',
-      'Étapes pour intégrer MTN MoMo:\n\n' +
+      '🟡 Intégration MTN MoMo CI:\n\n' +
+      '🌐 Étapes d\'intégration:\n' +
       '1. Visitez momodeveloper.mtn.com\n' +
       '2. Créez un compte développeur\n' +
-      '3. Souscrivez au produit Collections\n' +
+      '3. Souscrivez au produit "Collections"\n' +
       '4. Obtenez vos clés API\n' +
       '5. Testez en sandbox\n' +
       '6. Demandez l\'accès production\n\n' +
-      'Frais: ~2-3% par transaction',
+      '💰 Frais: ~2-3% par transaction\n' +
+      '⏱️ Délai d\'approbation: 2-4 semaines',
       [
         { text: 'Annuler' },
-        { text: 'Ouvrir le site', onPress: () => Linking.openURL('https://momodeveloper.mtn.com') }
+        { text: 'Configurer', onPress: () => showMtnConfig() },
+        { text: 'Site MTN', onPress: () => Linking.openURL('https://momodeveloper.mtn.com') }
+      ]
+    );
+  };
+
+  const showMtnConfig = () => {
+    Alert.prompt(
+      'Configuration MTN MoMo',
+      'Entrez votre Subscription Key:',
+      [
+        { text: 'Annuler' },
+        { 
+          text: 'Suivant', 
+          onPress: (subscriptionKey) => {
+            if (subscriptionKey) {
+              Alert.prompt(
+                'Configuration MTN MoMo',
+                'Entrez votre User ID:',
+                [
+                  { text: 'Annuler' },
+                  { 
+                    text: 'Suivant', 
+                    onPress: (userId) => {
+                      if (userId) {
+                        Alert.prompt(
+                          'Configuration MTN MoMo',
+                          'Entrez votre API Key:',
+                          [
+                            { text: 'Annuler' },
+                            { 
+                              text: 'Configurer', 
+                              onPress: async (apiKey) => {
+                                if (apiKey) {
+                                  try {
+                                    await productionService.configureMtnMomo({
+                                      subscriptionKey,
+                                      userId,
+                                      apiKey,
+                                      sandboxMode: !productionService.isProduction(),
+                                    });
+                                    updateStepStatus('mtn-api', 'completed');
+                                    Alert.alert('Succès', 'MTN MoMo configuré!');
+                                  } catch (error) {
+                                    Alert.alert('Erreur', 'Configuration échouée');
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        );
+                      }
+                    }
+                  }
+                ]
+              );
+            }
+          }
+        }
       ]
     );
   };
@@ -289,27 +456,86 @@ export default function ProductionGuideScreen() {
   const showWaveApiGuide = () => {
     Alert.alert(
       'API Wave',
-      'Étapes pour intégrer Wave:\n\n' +
+      '🔵 Intégration Wave CI:\n\n' +
+      '📞 Étapes d\'intégration:\n' +
       '1. Contactez Wave directement\n' +
+      '   📧 Email: developers@wave.com\n' +
+      '   📱 WhatsApp: +221 77 xxx xx xx\n\n' +
       '2. Présentez votre projet tontine\n' +
       '3. Négociez les conditions\n' +
       '4. Obtenez l\'accès API\n' +
       '5. Intégrez et testez\n\n' +
-      'Wave est généralement plus ouvert aux fintechs locales.',
-      [{ text: 'Compris' }]
+      '💡 Avantage: Wave est généralement plus ouvert aux fintechs locales\n' +
+      '💰 Frais négociables selon le volume',
+      [
+        { text: 'Annuler' },
+        { text: 'Configurer', onPress: () => showWaveConfig() },
+        { text: 'Contacter Wave', onPress: () => Linking.openURL('mailto:developers@wave.com') }
+      ]
+    );
+  };
+
+  const showWaveConfig = () => {
+    Alert.prompt(
+      'Configuration Wave',
+      'Entrez votre API Key Wave:',
+      [
+        { text: 'Annuler' },
+        { 
+          text: 'Suivant', 
+          onPress: (apiKey) => {
+            if (apiKey) {
+              Alert.prompt(
+                'Configuration Wave',
+                'Entrez votre Secret Key:',
+                [
+                  { text: 'Annuler' },
+                  { 
+                    text: 'Configurer', 
+                    onPress: async (secretKey) => {
+                      if (secretKey) {
+                        try {
+                          await productionService.configureWave({
+                            apiKey,
+                            secretKey,
+                            sandboxMode: !productionService.isProduction(),
+                          });
+                          updateStepStatus('wave-api', 'completed');
+                          Alert.alert('Succès', 'Wave configuré!');
+                        } catch (error) {
+                          Alert.alert('Erreur', 'Configuration échouée');
+                        }
+                      }
+                    }
+                  }
+                ]
+              );
+            }
+          }
+        }
+      ]
     );
   };
 
   const showPaymentSecurityGuide = () => {
     Alert.alert(
       'Sécurité des Paiements',
-      'Mesures de sécurité essentielles:\n\n' +
-      '• Chiffrement des données sensibles\n' +
+      '🔒 Mesures de sécurité essentielles:\n\n' +
+      '🛡️ Chiffrement:\n' +
+      '• Données sensibles chiffrées (AES-256)\n' +
+      '• Communications HTTPS/TLS 1.3\n' +
+      '• Clés API sécurisées\n\n' +
+      '✅ Validation:\n' +
       '• Validation côté serveur\n' +
+      '• Vérification des signatures\n' +
+      '• Timeouts appropriés\n\n' +
+      '📊 Monitoring:\n' +
       '• Logs d\'audit des transactions\n' +
       '• Détection de fraude\n' +
-      '• Conformité PCI DSS\n' +
-      '• Tests de pénétration',
+      '• Alertes en temps réel\n\n' +
+      '📋 Conformité:\n' +
+      '• Standards PCI DSS\n' +
+      '• Réglementations locales BCEAO',
       [{ text: 'Compris' }]
     );
   };
@@ -317,94 +543,148 @@ export default function ProductionGuideScreen() {
   const showFirebaseGuide = () => {
     Alert.alert(
       'Configuration Firebase',
-      'Étapes pour Firebase Cloud Messaging:\n\n' +
+      '🔥 Firebase Cloud Messaging:\n\n' +
+      '📋 Étapes de configuration:\n' +
       '1. Créez un projet Firebase\n' +
       '2. Ajoutez vos apps iOS/Android\n' +
       '3. Téléchargez google-services.json\n' +
       '4. Configurez les certificats push iOS\n' +
       '5. Testez les notifications\n\n' +
-      'Alternative: Utilisez Expo Push Notifications',
+      '🔄 Alternative recommandée:\n' +
+      'Utilisez Expo Push Notifications (plus simple)\n\n' +
+      '💡 Expo Push est déjà intégré dans l\'app!',
       [
         { text: 'Annuler' },
-        { text: 'Ouvrir Firebase', onPress: () => Linking.openURL('https://console.firebase.google.com') }
+        { text: 'Utiliser Expo Push', onPress: () => testNotifications() },
+        { text: 'Firebase Console', onPress: () => Linking.openURL('https://console.firebase.google.com') }
       ]
     );
   };
 
   const testNotifications = async () => {
     try {
+      updateStepStatus('expo-notifications', 'in-progress');
+      
       const result = await notificationService.initialize();
       if (result.success) {
         await notificationService.scheduleLocalNotification({
-          title: 'Test de notification',
-          body: 'Les notifications fonctionnent correctement!',
+          title: '🎉 Test de notification',
+          body: 'Les notifications fonctionnent parfaitement!',
           trigger: { seconds: 2 }
         });
+        
+        // Configure notifications in production service
+        await productionService.configureNotifications({
+          firebaseProjectId: 'tontine-app-ci',
+        });
+        
         updateStepStatus('expo-notifications', 'completed');
-        Alert.alert('Succès', 'Notification de test programmée!');
+        Alert.alert('✅ Succès', 'Notification de test programmée!\nLes notifications push sont configurées.');
       } else {
         updateStepStatus('expo-notifications', 'error');
-        Alert.alert('Erreur', result.error || 'Échec du test de notification');
+        Alert.alert('❌ Erreur', result.error || 'Échec du test de notification');
       }
     } catch (error) {
       updateStepStatus('expo-notifications', 'error');
-      Alert.alert('Erreur', 'Échec du test de notification');
+      Alert.alert('❌ Erreur', 'Échec du test de notification');
     }
   };
 
   const showAppStoreAssetsGuide = () => {
     Alert.alert(
       'Assets App Store',
-      'Préparez ces éléments:\n\n' +
-      '• Icône app (1024x1024px)\n' +
-      '• Captures d\'écran (différentes tailles)\n' +
-      '• Description de l\'app\n' +
+      '📱 Préparez ces éléments:\n\n' +
+      '🎨 Visuels obligatoires:\n' +
+      '• Icône app (1024x1024px, PNG)\n' +
+      '• Captures d\'écran iPhone (plusieurs tailles)\n' +
+      '• Captures d\'écran iPad (si supporté)\n' +
+      '• Captures d\'écran Android (plusieurs densités)\n\n' +
+      '📝 Textes requis:\n' +
+      '• Nom de l\'app (30 caractères max)\n' +
+      '• Description courte (80 caractères)\n' +
+      '• Description complète (4000 caractères)\n' +
       '• Mots-clés pour le SEO\n' +
+      '• Notes de version\n\n' +
+      '⚖️ Documents légaux:\n' +
       '• Politique de confidentialité\n' +
-      '• Conditions d\'utilisation',
-      [{ text: 'Compris' }]
+      '• Conditions d\'utilisation\n' +
+      '• Mentions légales',
+      [
+        { text: 'Compris' },
+        { text: 'Template Assets', onPress: () => Linking.openURL('https://www.figma.com/templates/app-store-assets/') }
+      ]
     );
   };
 
   const showIosSubmissionGuide = () => {
     Alert.alert(
       'Soumission iOS',
-      'Étapes pour l\'App Store:\n\n' +
-      '1. Compte Apple Developer (99$/an)\n' +
-      '2. Configurez App Store Connect\n' +
-      '3. Créez l\'app record\n' +
-      '4. Build avec EAS Build\n' +
-      '5. Upload via Transporter\n' +
+      '🍎 App Store iOS:\n\n' +
+      '💳 Prérequis:\n' +
+      '• Compte Apple Developer (99$/an)\n' +
+      '• Certificats de développement\n' +
+      '• Profils de provisioning\n\n' +
+      '📋 Étapes de soumission:\n' +
+      '1. Configurez App Store Connect\n' +
+      '2. Créez l\'app record\n' +
+      '3. Build avec EAS Build\n' +
+      '4. Upload via Transporter ou Xcode\n' +
+      '5. Remplissez les métadonnées\n' +
       '6. Soumettez pour review\n\n' +
-      'Délai de review: 1-7 jours',
-      [{ text: 'Compris' }]
+      '⏱️ Délai de review: 1-7 jours\n' +
+      '📊 Taux d\'approbation: ~85%',
+      [
+        { text: 'Annuler' },
+        { text: 'Guide EAS', onPress: () => Linking.openURL('https://docs.expo.dev/submit/ios/') },
+        { text: 'App Store Connect', onPress: () => Linking.openURL('https://appstoreconnect.apple.com') }
+      ]
     );
   };
 
   const showAndroidSubmissionGuide = () => {
     Alert.alert(
       'Soumission Android',
-      'Étapes pour Google Play:\n\n' +
-      '1. Compte Google Play Console (25$ unique)\n' +
-      '2. Créez l\'app dans la console\n' +
-      '3. Build AAB avec EAS Build\n' +
-      '4. Upload et configurez\n' +
-      '5. Soumettez pour review\n\n' +
-      'Délai de review: quelques heures',
-      [{ text: 'Compris' }]
+      '🤖 Google Play Store:\n\n' +
+      '💳 Prérequis:\n' +
+      '• Compte Google Play Console (25$ unique)\n' +
+      '• Certificat de signature d\'app\n\n' +
+      '📋 Étapes de soumission:\n' +
+      '1. Créez l\'app dans Play Console\n' +
+      '2. Build AAB avec EAS Build\n' +
+      '3. Upload et configurez\n' +
+      '4. Remplissez les métadonnées\n' +
+      '5. Configurez la distribution\n' +
+      '6. Soumettez pour review\n\n' +
+      '⏱️ Délai de review: quelques heures\n' +
+      '📊 Taux d\'approbation: ~95%',
+      [
+        { text: 'Annuler' },
+        { text: 'Guide EAS', onPress: () => Linking.openURL('https://docs.expo.dev/submit/android/') },
+        { text: 'Play Console', onPress: () => Linking.openURL('https://play.google.com/console') }
+      ]
     );
   };
 
   const showUserTestingGuide = () => {
     Alert.alert(
       'Tests Utilisateurs',
-      'Plan de test recommandé:\n\n' +
+      '👥 Plan de test recommandé:\n\n' +
+      '🎯 Objectifs de test:\n' +
       '• 5-10 cercles de test\n' +
       '• 50-100 utilisateurs beta\n' +
-      '• Testez tous les scénarios\n' +
-      '• Collectez les feedbacks\n' +
-      '• Mesurez les performances\n' +
-      '• Corrigez les bugs critiques',
+      '• Tous les scénarios couverts\n\n' +
+      '📋 Scénarios à tester:\n' +
+      '• Inscription et vérification OTP\n' +
+      '• Création de tontine\n' +
+      '• Invitation de membres\n' +
+      '• Paiements réels (petits montants)\n' +
+      '• Notifications et rappels\n' +
+      '• Gestion des retards\n\n' +
+      '📊 Métriques à suivre:\n' +
+      '• Taux de conversion\n' +
+      '• Temps de réponse\n' +
+      '• Taux d\'erreur\n' +
+      '• Satisfaction utilisateur',
       [{ text: 'Compris' }]
     );
   };
@@ -412,14 +692,22 @@ export default function ProductionGuideScreen() {
   const showPaymentTestingGuide = () => {
     Alert.alert(
       'Tests de Paiement',
-      'Tests essentiels:\n\n' +
-      '• Paiements réussis\n' +
-      '• Paiements échoués\n' +
-      '• Timeouts et reconnexions\n' +
-      '• Remboursements\n' +
-      '• Concurrence (plusieurs paiements)\n' +
-      '• Montants limites\n\n' +
-      'Utilisez les environnements sandbox!',
+      '💳 Tests essentiels:\n\n' +
+      '✅ Scénarios de succès:\n' +
+      '• Paiements Orange Money\n' +
+      '• Paiements MTN MoMo\n' +
+      '• Paiements Wave\n' +
+      '• Montants variés (min/max)\n\n' +
+      '❌ Scénarios d\'échec:\n' +
+      '• Solde insuffisant\n' +
+      '• Timeouts réseau\n' +
+      '• Annulations utilisateur\n' +
+      '• Erreurs serveur\n\n' +
+      '🔄 Tests de robustesse:\n' +
+      '• Paiements simultanés\n' +
+      '• Reconnexions automatiques\n' +
+      '• Gestion des doublons\n\n' +
+      '⚠️ Important: Utilisez les environnements sandbox!',
       [{ text: 'Compris' }]
     );
   };
@@ -427,15 +715,50 @@ export default function ProductionGuideScreen() {
   const showSecurityAuditGuide = () => {
     Alert.alert(
       'Audit de Sécurité',
-      'Points à vérifier:\n\n' +
-      '• Authentification sécurisée\n' +
-      '• Chiffrement des données\n' +
-      '• Protection contre OWASP Top 10\n' +
-      '• Tests de pénétration\n' +
-      '• Audit du code\n' +
-      '• Conformité réglementaire',
-      [{ text: 'Compris' }]
+      '🔒 Points à vérifier:\n\n' +
+      '🔐 Authentification:\n' +
+      '• OTP sécurisé\n' +
+      '• Tokens JWT\n' +
+      '• Sessions expirantes\n\n' +
+      '🛡️ Protection des données:\n' +
+      '• Chiffrement AES-256\n' +
+      '• HTTPS obligatoire\n' +
+      '• Stockage sécurisé\n\n' +
+      '🚨 Tests de sécurité:\n' +
+      '• Injection SQL\n' +
+      '• XSS/CSRF\n' +
+      '• Tests de pénétration\n\n' +
+      '📋 Conformité:\n' +
+      '• RGPD/Protection des données\n' +
+      '• Réglementations BCEAO\n' +
+      '• Standards PCI DSS',
+      [
+        { text: 'Compris' },
+        { text: 'OWASP Guide', onPress: () => Linking.openURL('https://owasp.org/www-project-mobile-top-10/') }
+      ]
     );
+  };
+
+  const performHealthCheck = async () => {
+    try {
+      const health = await productionService.performHealthCheck();
+      setHealthStatus(health);
+      
+      const statusEmoji = health.status === 'healthy' ? '✅' : 
+                         health.status === 'warning' ? '⚠️' : '❌';
+      
+      const message = health.checks.map(check => 
+        `${check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️' : '❌'} ${check.name}: ${check.message}`
+      ).join('\n');
+      
+      Alert.alert(
+        `${statusEmoji} État du Système`,
+        `Statut global: ${health.status}\n\n${message}`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de vérifier l\'état du système');
+    }
   };
 
   const getStatusColor = (status: ProductionStep['status']) => {
@@ -489,10 +812,62 @@ export default function ProductionGuideScreen() {
           <Icon name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={commonStyles.headerTitle}>Guide de Production</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={performHealthCheck}>
+          <Icon name="pulse" size={24} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={commonStyles.content} showsVerticalScrollIndicator={false}>
+        {/* Health Status */}
+        {healthStatus && (
+          <View style={[styles.healthCard, { 
+            borderColor: healthStatus.status === 'healthy' ? colors.success : 
+                        healthStatus.status === 'warning' ? colors.warning : colors.error 
+          }]}>
+            <View style={styles.healthHeader}>
+              <Icon 
+                name={healthStatus.status === 'healthy' ? 'checkmark-circle' : 
+                     healthStatus.status === 'warning' ? 'warning' : 'close-circle'} 
+                size={20} 
+                color={healthStatus.status === 'healthy' ? colors.success : 
+                       healthStatus.status === 'warning' ? colors.warning : colors.error} 
+              />
+              <Text style={styles.healthTitle}>
+                État: {healthStatus.status === 'healthy' ? 'Sain' : 
+                       healthStatus.status === 'warning' ? 'Attention' : 'Erreur'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* API URL Configuration */}
+        {showApiUrlInput && (
+          <View style={styles.configCard}>
+            <Text style={styles.configTitle}>Configuration API URL</Text>
+            <TextInput
+              style={styles.configInput}
+              value={apiUrl}
+              onChangeText={setApiUrl}
+              placeholder="https://votre-api-production.com/api"
+              placeholderTextColor={colors.textSecondary}
+            />
+            <View style={styles.configActions}>
+              <TouchableOpacity 
+                style={[styles.configButton, styles.configButtonSecondary]}
+                onPress={() => setShowApiUrlInput(false)}
+              >
+                <Text style={styles.configButtonTextSecondary}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.configButton}
+                onPress={updateApiUrl}
+              >
+                <Text style={styles.configButtonText}>Mettre à jour</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Progress Overview */}
         <View style={styles.progressCard}>
           <Text style={styles.progressTitle}>Progression Globale</Text>
@@ -613,22 +988,24 @@ export default function ProductionGuideScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Production Checklist */}
+        {/* Final Checklist */}
         <View style={styles.checklist}>
-          <Text style={styles.sectionTitle}>Checklist Finale</Text>
+          <Text style={styles.sectionTitle}>✅ Checklist Finale de Lancement</Text>
           <Text style={styles.checklistDescription}>
-            Avant le lancement en production, assurez-vous que:
+            Avant le lancement en production, vérifiez que:
           </Text>
           
           {[
-            'Tous les tests sont passés avec succès',
-            'Les API de paiement sont configurées et testées',
-            'Les notifications push fonctionnent',
-            'La base de données est sécurisée et sauvegardée',
-            'L\'audit de sécurité est terminé',
-            'Les conditions d\'utilisation sont prêtes',
-            'Le support client est en place',
-            'Le monitoring est configuré'
+            'Backend déployé et accessible via HTTPS',
+            'Base de données PostgreSQL configurée et sécurisée',
+            'Au moins un fournisseur de paiement intégré et testé',
+            'Notifications push fonctionnelles',
+            'Tests utilisateurs terminés avec succès',
+            'Audit de sécurité effectué',
+            'Assets App Store préparés',
+            'Politique de confidentialité et CGU rédigées',
+            'Support client mis en place',
+            'Monitoring et alertes configurés'
           ].map((item, index) => (
             <View key={index} style={styles.checklistItem}>
               <Icon name="checkmark-circle-outline" size={16} color={colors.textSecondary} />
@@ -636,12 +1013,98 @@ export default function ProductionGuideScreen() {
             </View>
           ))}
         </View>
+
+        {/* Contact Support */}
+        <View style={styles.supportCard}>
+          <Text style={styles.supportTitle}>🚀 Prêt pour le lancement ?</Text>
+          <Text style={styles.supportDescription}>
+            Une fois toutes les étapes complétées, votre app Tontine sera prête pour la production !
+          </Text>
+          <TouchableOpacity 
+            style={styles.supportButton}
+            onPress={() => Alert.alert(
+              'Félicitations! 🎉', 
+              'Votre app Tontine est maintenant prête pour le lancement en production!\n\nBonne chance avec votre projet!'
+            )}
+          >
+            <Icon name="rocket" size={20} color={colors.background} />
+            <Text style={styles.supportButtonText}>Lancer en Production</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = {
+  healthCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 2,
+  },
+  healthHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  healthTitle: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text,
+  },
+  configCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  configTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginBottom: 12,
+  },
+  configInput: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 16,
+  },
+  configActions: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+  },
+  configButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center' as const,
+    marginLeft: 8,
+  },
+  configButtonSecondary: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginLeft: 0,
+    marginRight: 8,
+  },
+  configButtonText: {
+    color: colors.background,
+    fontWeight: '600' as const,
+  },
+  configButtonTextSecondary: {
+    color: colors.text,
+    fontWeight: '600' as const,
+  },
   progressCard: {
     backgroundColor: colors.surface,
     borderRadius: 12,
@@ -781,7 +1244,7 @@ const styles = {
     color: colors.text,
   },
   checklist: {
-    marginBottom: 40,
+    marginBottom: 20,
   },
   checklistDescription: {
     fontSize: 14,
@@ -800,5 +1263,40 @@ const styles = {
     color: colors.text,
     flex: 1,
     lineHeight: 20,
+  },
+  supportCard: {
+    backgroundColor: colors.primary + '10',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 40,
+    alignItems: 'center' as const,
+  },
+  supportTitle: {
+    fontSize: 20,
+    fontWeight: 'bold' as const,
+    color: colors.text,
+    marginBottom: 8,
+    textAlign: 'center' as const,
+  },
+  supportDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  supportButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  supportButtonText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.background,
   },
 };

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, Linking } from 'react-native';
 import Icon from '../components/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -126,11 +126,7 @@ export default function DeploymentStatusScreen() {
   const [checks, setChecks] = useState<DeploymentCheck[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    initializeChecks();
-  }, []);
-
-  const initializeChecks = async () => {
+  const initializeChecks = useCallback(async () => {
     console.log('Initializing deployment checks...');
     setLoading(true);
     
@@ -251,7 +247,11 @@ export default function DeploymentStatusScreen() {
     setChecks(deploymentChecks);
     await performHealthChecks(deploymentChecks);
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    initializeChecks();
+  }, [initializeChecks]);
 
   const performHealthChecks = async (checkList: DeploymentCheck[]) => {
     console.log('Performing health checks...');

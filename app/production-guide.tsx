@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, Linking, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
@@ -28,18 +28,12 @@ export default function ProductionGuideScreen() {
   const [showApiUrlInput, setShowApiUrlInput] = useState(false);
   const [healthStatus, setHealthStatus] = useState<any>(null);
 
-  useEffect(() => {
-    initializeSteps();
-    checkCurrentStatus();
-    loadCurrentApiUrl();
-  }, []);
-
-  const loadCurrentApiUrl = async () => {
+  const loadCurrentApiUrl = useCallback(async () => {
     const config = productionService.getConfig();
     setApiUrl(config.apiBaseUrl);
-  };
+  }, []);
 
-  const initializeSteps = () => {
+  const initializeSteps = useCallback(() => {
     const productionSteps: ProductionStep[] = [
       // Backend Configuration
       {
@@ -188,9 +182,9 @@ export default function ProductionGuideScreen() {
     ];
 
     setSteps(productionSteps);
-  };
+  }, []);
 
-  const checkCurrentStatus = async () => {
+  const checkCurrentStatus = useCallback(async () => {
     try {
       // Perform health check
       const health = await productionService.performHealthCheck();
@@ -231,7 +225,13 @@ export default function ProductionGuideScreen() {
     } catch (error) {
       console.error('Status check failed:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    initializeSteps();
+    checkCurrentStatus();
+    loadCurrentApiUrl();
+  }, [initializeSteps, checkCurrentStatus, loadCurrentApiUrl]);
 
   const updateStepStatus = (stepId: string, status: ProductionStep['status']) => {
     setSteps(prev => prev.map(step => 

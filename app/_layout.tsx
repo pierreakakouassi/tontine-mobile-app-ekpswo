@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator } from 'react-native';
@@ -23,36 +23,7 @@ export default function RootLayout() {
   const { performSync } = useSync();
   const [isAppReady, setIsAppReady] = useState(false);
 
-  useEffect(() => {
-    initializeApp();
-  }, []);
-
-  useEffect(() => {
-    // Handle deep links for payment callbacks
-    const handleDeepLink = (url: string) => {
-      console.log('Deep link received:', url);
-      
-      if (url.includes('payment-callback')) {
-        handlePaymentCallback(url);
-      }
-    };
-
-    // Listen for deep links
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      handleDeepLink(url);
-    });
-
-    // Check if app was opened with a deep link
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        handleDeepLink(url);
-      }
-    });
-
-    return () => subscription?.remove();
-  }, []);
-
-  const initializeApp = async () => {
+  const initializeApp = useCallback(async () => {
     try {
       console.log('Initializing app...');
 
@@ -81,9 +52,9 @@ export default function RootLayout() {
       setIsAppReady(true);
       await SplashScreen.hideAsync();
     }
-  };
+  }, [authLoading, isAuthenticated, performSync]);
 
-  const handlePaymentCallback = async (url: string) => {
+  const handlePaymentCallback = useCallback(async (url: string) => {
     try {
       console.log('Processing payment callback...');
       
@@ -106,7 +77,36 @@ export default function RootLayout() {
     } catch (error) {
       console.error('Payment callback handling error:', error);
     }
-  };
+  }, [performSync]);
+
+  useEffect(() => {
+    initializeApp();
+  }, [initializeApp]);
+
+  useEffect(() => {
+    // Handle deep links for payment callbacks
+    const handleDeepLink = (url: string) => {
+      console.log('Deep link received:', url);
+      
+      if (url.includes('payment-callback')) {
+        handlePaymentCallback(url);
+      }
+    };
+
+    // Listen for deep links
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleDeepLink(url);
+    });
+
+    // Check if app was opened with a deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink(url);
+      }
+    });
+
+    return () => subscription?.remove();
+  }, [handlePaymentCallback]);
 
   if (!isAppReady) {
     return (

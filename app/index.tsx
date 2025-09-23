@@ -12,7 +12,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     console.log('Home screen loaded, user tontines:', userTontines.length);
-  }, []);
+  }, [userTontines.length]);
 
   const handleCreateTontine = () => {
     console.log('Navigate to create tontine');

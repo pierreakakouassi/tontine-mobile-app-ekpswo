@@ -1,47 +1,74 @@
 {
   "expo": {
-    "name": "Natively",
-    "slug": "Natively",
+    "name": "Tontine CI",
+    "slug": "tontine-ci",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/natively-dark.png",
-    "userInterfaceStyle": "dark",
+    "icon": "./assets/images/tontine-icon.png",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/natively-dark.png",
+      "image": "./assets/images/tontine-splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.Natively",
+      "bundleIdentifier": "com.tontineci.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Cette app utilise la caméra pour prendre des photos de profil.",
+        "NSPhotoLibraryUsageDescription": "Cette app accède à vos photos pour sélectionner une photo de profil.",
+        "NSContactsUsageDescription": "Cette app accède à vos contacts pour faciliter les invitations aux tontines."
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/natively-dark.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/images/tontine-adaptive-icon.png",
+        "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Natively"
+      "package": "com.tontineci.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_CONTACTS",
+        "android.permission.SEND_SMS",
+        "android.permission.VIBRATE",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
-      "favicon": "./assets/images/final_quest_240x240.png",
+      "favicon": "./assets/images/tontine-favicon.png",
       "bundler": "metro"
     },
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications",
+      "expo-sms",
+      "expo-image-picker",
+      "expo-secure-store"
     ],
-    "scheme": "natively",
+    "scheme": "tontine-ci",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "your-expo-project-id-here"
+      }
+    },
+    "notification": {
+      "icon": "./assets/images/notification-icon.png",
+      "color": "#2E7D32",
+      "androidMode": "default",
+      "androidCollapsedTitle": "Tontine CI"
     }
   }
 }

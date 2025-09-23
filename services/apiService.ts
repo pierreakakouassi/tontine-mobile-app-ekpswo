@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { User, Tontine, Payment, Notification, CreateTontineData } from '../types';
 
-// API Configuration
-const API_BASE_URL = __DEV__ 
+// API Configuration - will be updated by productionService
+let API_BASE_URL = __DEV__ 
   ? 'http://localhost:3000/api' 
   : 'https://your-production-api.com/api';
 
@@ -33,15 +33,30 @@ class ApiService {
     }
   }
 
+  // Allow production service to update the API base URL
+  updateApiBaseUrl(url: string) {
+    API_BASE_URL = url;
+    console.log('API Base URL updated to:', url);
+  }
+
+  getApiBaseUrl(): string {
+    return API_BASE_URL;
+  }
+
   private async getHeaders(): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'X-Client-Version': '1.0.0',
+      'X-Platform': 'mobile',
     };
 
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
+
+    // Add environment header for backend routing
+    headers['X-Environment'] = __DEV__ ? 'development' : 'production';
 
     return headers;
   }
@@ -56,22 +71,45 @@ class ApiService {
 
       console.log(`Making API request to: ${url}`);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+
       const response = await fetch(url, {
         ...options,
         headers: {
           ...headers,
           ...options.headers,
         },
-        timeout: API_TIMEOUT,
+        signal: controller.signal,
       });
 
-      const data = await response.json();
+      clearTimeout(timeoutId);
+
+      let data;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = await response.text();
+      }
 
       if (!response.ok) {
         console.error('API Error:', response.status, data);
+        
+        // Handle specific error codes
+        if (response.status === 401) {
+          // Token expired, clear auth
+          await this.logout();
+          return {
+            success: false,
+            error: 'Session expirée, veuillez vous reconnecter',
+          };
+        }
+        
         return {
           success: false,
-          error: data.message || `HTTP ${response.status}`,
+          error: data.message || data.error || `HTTP ${response.status}`,
         };
       }
 
@@ -82,11 +120,31 @@ class ApiService {
       };
     } catch (error) {
       console.error('Network error:', error);
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return {
+            success: false,
+            error: 'Délai d\'attente dépassé',
+          };
+        }
+        
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Network error',
+        error: 'Erreur de connexion',
       };
     }
+  }
+
+  // Health check endpoint
+  async healthCheck(): Promise<ApiResponse<{ status: string; timestamp: string }>> {
+    return this.makeRequest('/health');
   }
 
   // Authentication
@@ -113,8 +171,27 @@ class ApiService {
     return response;
   }
 
+  async refreshToken(): Promise<ApiResponse<{ token: string }>> {
+    const response = await this.makeRequest<{ token: string }>('/auth/refresh', {
+      method: 'POST',
+    });
+
+    if (response.success && response.data) {
+      this.authToken = response.data.token;
+      await SecureStore.setItemAsync('auth_token', response.data.token);
+      console.log('Token refreshed');
+    }
+
+    return response;
+  }
+
   async logout(): Promise<void> {
     try {
+      // Notify backend of logout
+      if (this.authToken) {
+        await this.makeRequest('/auth/logout', { method: 'POST' });
+      }
+      
       await SecureStore.deleteItemAsync('auth_token');
       await AsyncStorage.removeItem('user');
       this.authToken = null;
@@ -136,6 +213,12 @@ class ApiService {
     });
   }
 
+  async deleteAccount(): Promise<ApiResponse<void>> {
+    return this.makeRequest('/user/account', {
+      method: 'DELETE',
+    });
+  }
+
   // Tontine Management
   async getUserTontines(): Promise<ApiResponse<Tontine[]>> {
     return this.makeRequest('/tontines');
@@ -152,10 +235,29 @@ class ApiService {
     });
   }
 
+  async updateTontine(id: string, updates: Partial<Tontine>): Promise<ApiResponse<Tontine>> {
+    return this.makeRequest(`/tontines/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteTontine(id: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/tontines/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   async joinTontine(tontineId: string, inviteCode?: string): Promise<ApiResponse<Tontine>> {
     return this.makeRequest(`/tontines/${tontineId}/join`, {
       method: 'POST',
       body: JSON.stringify({ inviteCode }),
+    });
+  }
+
+  async leaveTontine(tontineId: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/tontines/${tontineId}/leave`, {
+      method: 'POST',
     });
   }
 
@@ -164,6 +266,10 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ phoneNumbers }),
     });
+  }
+
+  async getTontineMembers(tontineId: string): Promise<ApiResponse<User[]>> {
+    return this.makeRequest(`/tontines/${tontineId}/members`);
   }
 
   // Payment Management
@@ -183,6 +289,19 @@ class ApiService {
     return this.makeRequest(endpoint);
   }
 
+  async cancelPayment(transactionId: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/payments/${transactionId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  async refundPayment(transactionId: string, reason: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/payments/${transactionId}/refund`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
   // Notifications
   async getNotifications(): Promise<ApiResponse<Notification[]>> {
     return this.makeRequest('/notifications');
@@ -200,12 +319,54 @@ class ApiService {
     });
   }
 
+  async deleteNotification(notificationId: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/notifications/${notificationId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Push Notification Token
   async updatePushToken(token: string): Promise<ApiResponse<void>> {
     return this.makeRequest('/user/push-token', {
       method: 'PUT',
       body: JSON.stringify({ pushToken: token }),
     });
+  }
+
+  // Analytics and Reporting
+  async getTontineAnalytics(tontineId: string): Promise<ApiResponse<any>> {
+    return this.makeRequest(`/tontines/${tontineId}/analytics`);
+  }
+
+  async getUserAnalytics(): Promise<ApiResponse<any>> {
+    return this.makeRequest('/user/analytics');
+  }
+
+  // Admin endpoints (if user has admin role)
+  async getSystemStats(): Promise<ApiResponse<any>> {
+    return this.makeRequest('/admin/stats');
+  }
+
+  async getAllUsers(): Promise<ApiResponse<User[]>> {
+    return this.makeRequest('/admin/users');
+  }
+
+  async getAllTontines(): Promise<ApiResponse<Tontine[]>> {
+    return this.makeRequest('/admin/tontines');
+  }
+
+  // Utility methods
+  isAuthenticated(): boolean {
+    return !!this.authToken;
+  }
+
+  async testConnection(): Promise<boolean> {
+    try {
+      const response = await this.healthCheck();
+      return response.success;
+    } catch (error) {
+      return false;
+    }
   }
 }
 

@@ -1,298 +1,381 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { commonStyles, colors } from '../styles/commonStyles';
 import Icon from '../components/Icon';
+import { useAuth } from '../hooks/useAuth';
+import { useSync } from '../hooks/useSync';
+import { useNotifications } from '../hooks/useNotifications';
+import { storageService } from '../services/storageService';
+import { commonStyles, colors } from '../styles/commonStyles';
 
 export default function SettingsScreen() {
+  const { logout } = useAuth();
+  const { performSync, isOnline, lastSync, isSyncing } = useSync();
+  const { cancelAllNotifications } = useNotifications();
+  
   const [notifications, setNotifications] = useState({
     paymentReminders: true,
-    payoutAlerts: true,
-    weeklyReports: false,
+    roundComplete: true,
+    invitations: true,
     marketing: false,
   });
 
   const [preferences, setPreferences] = useState({
-    darkMode: false,
+    autoSync: true,
+    offlineMode: false,
     biometricAuth: false,
-    autoBackup: true,
   });
 
+  const [storageSize, setStorageSize] = useState<number>(0);
+
+  useEffect(() => {
+    loadSettings();
+    getStorageSize();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const settingsResult = await storageService.getSettings();
+      if (settingsResult.success && settingsResult.data) {
+        const settings = settingsResult.data;
+        if (settings.notifications) {
+          setNotifications({ ...notifications, ...settings.notifications });
+        }
+        if (settings.preferences) {
+          setPreferences({ ...preferences, ...settings.preferences });
+        }
+      }
+      console.log('Settings loaded');
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+  };
+
+  const saveSettings = async () => {
+    try {
+      await storageService.storeSettings({
+        notifications,
+        preferences,
+      });
+      console.log('Settings saved');
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    }
+  };
+
+  const getStorageSize = async () => {
+    try {
+      const result = await storageService.getStorageSize();
+      if (result.success && result.size !== undefined) {
+        setStorageSize(result.size);
+      }
+    } catch (error) {
+      console.error('Failed to get storage size:', error);
+    }
+  };
+
   const handleNotificationToggle = (key: keyof typeof notifications) => {
-    setNotifications(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-    console.log(`Toggled ${key}:`, !notifications[key]);
+    const newNotifications = { ...notifications, [key]: !notifications[key] };
+    setNotifications(newNotifications);
+    saveSettings();
+    console.log('Notification setting toggled:', key, newNotifications[key]);
   };
 
   const handlePreferenceToggle = (key: keyof typeof preferences) => {
-    setPreferences(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-    console.log(`Toggled ${key}:`, !preferences[key]);
+    const newPreferences = { ...preferences, [key]: !preferences[key] };
+    setPreferences(newPreferences);
+    saveSettings();
+    console.log('Preference setting toggled:', key, newPreferences[key]);
+  };
+
+  const handleForceSync = async () => {
+    try {
+      console.log('Force sync requested');
+      const result = await performSync(true);
+      
+      if (result.success) {
+        Alert.alert('Succès', 'Synchronisation terminée avec succès');
+      } else {
+        Alert.alert('Erreur', result.error || 'Échec de la synchronisation');
+      }
+    } catch (error) {
+      console.error('Force sync error:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de la synchronisation');
+    }
+  };
+
+  const handleClearCache = async () => {
+    Alert.alert(
+      'Vider le cache',
+      'Cette action supprimera toutes les données mises en cache. Êtes-vous sûr ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Vider',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Clear non-essential data but keep user auth
+              await storageService.removeData('tontines');
+              await storageService.removeData('payments');
+              await storageService.removeData('notifications');
+              
+              await getStorageSize();
+              Alert.alert('Succès', 'Cache vidé avec succès');
+              console.log('Cache cleared');
+            } catch (error) {
+              console.error('Failed to clear cache:', error);
+              Alert.alert('Erreur', 'Impossible de vider le cache');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleExportData = async () => {
+    try {
+      console.log('Data export requested');
+      const result = await storageService.exportData();
+      
+      if (result.success && result.data) {
+        // In a real app, you would share this data or save to file
+        Alert.alert(
+          'Export réussi',
+          'Vos données ont été exportées. Dans une version complète, elles seraient sauvegardées dans un fichier.',
+          [
+            {
+              text: 'OK',
+              onPress: () => console.log('Export data length:', result.data?.length),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Erreur', result.error || 'Échec de l\'export');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'export');
+    }
   };
 
   const handleResetApp = () => {
     Alert.alert(
       'Réinitialiser l\'application',
-      'Cette action supprimera toutes vos données locales. Êtes-vous sûr ?',
+      'Cette action supprimera toutes vos données et vous déconnectera. Cette action est irréversible.',
       [
         { text: 'Annuler', style: 'cancel' },
-        { 
-          text: 'Réinitialiser', 
+        {
+          text: 'Réinitialiser',
           style: 'destructive',
-          onPress: () => console.log('App reset')
+          onPress: async () => {
+            try {
+              await cancelAllNotifications();
+              await storageService.clearAllData();
+              await logout();
+              console.log('App reset completed');
+            } catch (error) {
+              console.error('App reset error:', error);
+            }
+          },
         },
       ]
     );
   };
 
-  const handleExportData = () => {
-    Alert.alert(
-      'Exporter mes données',
-      'Vos données seront exportées au format JSON et sauvegardées sur votre appareil.',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { 
-          text: 'Exporter',
-          onPress: () => console.log('Data exported')
-        },
-      ]
-    );
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
-    <SafeAreaView style={commonStyles.container}>
-      <ScrollView style={commonStyles.content} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={{ 
-          flexDirection: 'row', 
-          alignItems: 'center',
-          paddingVertical: 20,
-        }}>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
-            <Icon name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={commonStyles.title}>Paramètres</Text>
-        </View>
+    <SafeAreaView style={commonStyles.safeArea}>
+      <ScrollView style={commonStyles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={commonStyles.container}>
+          {/* Header */}
+          <View style={commonStyles.header}>
+            <TouchableOpacity
+              style={commonStyles.backButton}
+              onPress={() => router.back()}
+            >
+              <Icon name="arrow-left" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={commonStyles.title}>Paramètres</Text>
+          </View>
 
-        {/* Notifications */}
-        <View style={commonStyles.section}>
-          <Text style={[commonStyles.subtitle, { marginBottom: 16 }]}>
-            Notifications
-          </Text>
-          
-          <View style={[commonStyles.card, { gap: 16 }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                  Rappels de paiement
+          {/* Sync Status */}
+          <View style={commonStyles.card}>
+            <View style={commonStyles.row}>
+              <Text style={commonStyles.label}>État de connexion</Text>
+              <View style={commonStyles.statusIndicator}>
+                <View style={[
+                  commonStyles.statusDot,
+                  { backgroundColor: isOnline ? colors.success : colors.error }
+                ]} />
+                <Text style={commonStyles.statusText}>
+                  {isOnline ? 'En ligne' : 'Hors ligne'}
                 </Text>
-                <Text style={commonStyles.textSecondary}>
+              </View>
+            </View>
+            
+            {lastSync && (
+              <View style={commonStyles.row}>
+                <Text style={commonStyles.label}>Dernière sync</Text>
+                <Text style={commonStyles.value}>
+                  {lastSync.toLocaleString('fr-FR')}
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[commonStyles.button, commonStyles.secondaryButton]}
+              onPress={handleForceSync}
+              disabled={isSyncing}
+            >
+              <Text style={commonStyles.buttonText}>
+                {isSyncing ? 'Synchronisation...' : 'Synchroniser maintenant'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Notifications */}
+          <View style={commonStyles.section}>
+            <Text style={commonStyles.sectionTitle}>Notifications</Text>
+            
+            <View style={commonStyles.settingItem}>
+              <View>
+                <Text style={commonStyles.settingLabel}>Rappels de paiement</Text>
+                <Text style={commonStyles.settingDescription}>
                   Recevoir des rappels avant les échéances
                 </Text>
               </View>
               <Switch
                 value={notifications.paymentReminders}
                 onValueChange={() => handleNotificationToggle('paymentReminders')}
-                trackColor={{ false: colors.border, true: colors.primary + '40' }}
-                thumbColor={notifications.paymentReminders ? colors.primary : colors.textSecondary}
+                trackColor={{ false: colors.border, true: colors.primary }}
               />
             </View>
 
-            <View style={{ height: 1, backgroundColor: colors.border }} />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                  Alertes de paiement
-                </Text>
-                <Text style={commonStyles.textSecondary}>
-                  Notifications quand quelqu&apos;un reçoit sa part
+            <View style={commonStyles.settingItem}>
+              <View>
+                <Text style={commonStyles.settingLabel}>Fin de tour</Text>
+                <Text style={commonStyles.settingDescription}>
+                  Notifications quand un tour se termine
                 </Text>
               </View>
               <Switch
-                value={notifications.payoutAlerts}
-                onValueChange={() => handleNotificationToggle('payoutAlerts')}
-                trackColor={{ false: colors.border, true: colors.primary + '40' }}
-                thumbColor={notifications.payoutAlerts ? colors.primary : colors.textSecondary}
+                value={notifications.roundComplete}
+                onValueChange={() => handleNotificationToggle('roundComplete')}
+                trackColor={{ false: colors.border, true: colors.primary }}
               />
             </View>
 
-            <View style={{ height: 1, backgroundColor: colors.border }} />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                  Rapports hebdomadaires
-                </Text>
-                <Text style={commonStyles.textSecondary}>
-                  Résumé de vos tontines chaque semaine
+            <View style={commonStyles.settingItem}>
+              <View>
+                <Text style={commonStyles.settingLabel}>Invitations</Text>
+                <Text style={commonStyles.settingDescription}>
+                  Notifications pour les nouvelles invitations
                 </Text>
               </View>
               <Switch
-                value={notifications.weeklyReports}
-                onValueChange={() => handleNotificationToggle('weeklyReports')}
-                trackColor={{ false: colors.border, true: colors.primary + '40' }}
-                thumbColor={notifications.weeklyReports ? colors.primary : colors.textSecondary}
-              />
-            </View>
-
-            <View style={{ height: 1, backgroundColor: colors.border }} />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                  Offres promotionnelles
-                </Text>
-                <Text style={commonStyles.textSecondary}>
-                  Recevoir des offres et nouveautés
-                </Text>
-              </View>
-              <Switch
-                value={notifications.marketing}
-                onValueChange={() => handleNotificationToggle('marketing')}
-                trackColor={{ false: colors.border, true: colors.primary + '40' }}
-                thumbColor={notifications.marketing ? colors.primary : colors.textSecondary}
+                value={notifications.invitations}
+                onValueChange={() => handleNotificationToggle('invitations')}
+                trackColor={{ false: colors.border, true: colors.primary }}
               />
             </View>
           </View>
-        </View>
 
-        {/* Preferences */}
-        <View style={commonStyles.section}>
-          <Text style={[commonStyles.subtitle, { marginBottom: 16 }]}>
-            Préférences
-          </Text>
-          
-          <View style={[commonStyles.card, { gap: 16 }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                  Mode sombre
-                </Text>
-                <Text style={commonStyles.textSecondary}>
-                  Interface sombre pour économiser la batterie
+          {/* Preferences */}
+          <View style={commonStyles.section}>
+            <Text style={commonStyles.sectionTitle}>Préférences</Text>
+            
+            <View style={commonStyles.settingItem}>
+              <View>
+                <Text style={commonStyles.settingLabel}>Synchronisation automatique</Text>
+                <Text style={commonStyles.settingDescription}>
+                  Synchroniser automatiquement les données
                 </Text>
               </View>
               <Switch
-                value={preferences.darkMode}
-                onValueChange={() => handlePreferenceToggle('darkMode')}
-                trackColor={{ false: colors.border, true: colors.primary + '40' }}
-                thumbColor={preferences.darkMode ? colors.primary : colors.textSecondary}
+                value={preferences.autoSync}
+                onValueChange={() => handlePreferenceToggle('autoSync')}
+                trackColor={{ false: colors.border, true: colors.primary }}
               />
             </View>
 
-            <View style={{ height: 1, backgroundColor: colors.border }} />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                  Authentification biométrique
-                </Text>
-                <Text style={commonStyles.textSecondary}>
-                  Utiliser l&apos;empreinte ou Face ID
+            <View style={commonStyles.settingItem}>
+              <View>
+                <Text style={commonStyles.settingLabel}>Mode hors ligne</Text>
+                <Text style={commonStyles.settingDescription}>
+                  Utiliser l'app sans connexion internet
                 </Text>
               </View>
               <Switch
-                value={preferences.biometricAuth}
-                onValueChange={() => handlePreferenceToggle('biometricAuth')}
-                trackColor={{ false: colors.border, true: colors.primary + '40' }}
-                thumbColor={preferences.biometricAuth ? colors.primary : colors.textSecondary}
-              />
-            </View>
-
-            <View style={{ height: 1, backgroundColor: colors.border }} />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                  Sauvegarde automatique
-                </Text>
-                <Text style={commonStyles.textSecondary}>
-                  Sauvegarder vos données dans le cloud
-                </Text>
-              </View>
-              <Switch
-                value={preferences.autoBackup}
-                onValueChange={() => handlePreferenceToggle('autoBackup')}
-                trackColor={{ false: colors.border, true: colors.primary + '40' }}
-                thumbColor={preferences.autoBackup ? colors.primary : colors.textSecondary}
+                value={preferences.offlineMode}
+                onValueChange={() => handlePreferenceToggle('offlineMode')}
+                trackColor={{ false: colors.border, true: colors.primary }}
               />
             </View>
           </View>
-        </View>
 
-        {/* Data Management */}
-        <View style={commonStyles.section}>
-          <Text style={[commonStyles.subtitle, { marginBottom: 16 }]}>
-            Gestion des données
-          </Text>
-          
-          <TouchableOpacity
-            style={[commonStyles.card, { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }]}
-            onPress={handleExportData}
-          >
-            <View style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: colors.primary + '20',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginRight: 16,
-            }}>
+          {/* Storage & Data */}
+          <View style={commonStyles.section}>
+            <Text style={commonStyles.sectionTitle}>Stockage et données</Text>
+            
+            <View style={commonStyles.row}>
+              <Text style={commonStyles.label}>Espace utilisé</Text>
+              <Text style={commonStyles.value}>{formatBytes(storageSize)}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={commonStyles.settingButton}
+              onPress={handleForceSync}
+            >
+              <Icon name="refresh-cw" size={20} color={colors.primary} />
+              <Text style={commonStyles.settingButtonText}>Actualiser les données</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={commonStyles.settingButton}
+              onPress={handleClearCache}
+            >
+              <Icon name="trash-2" size={20} color={colors.warning} />
+              <Text style={[commonStyles.settingButtonText, { color: colors.warning }]}>
+                Vider le cache
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={commonStyles.settingButton}
+              onPress={handleExportData}
+            >
               <Icon name="download" size={20} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                Exporter mes données
-              </Text>
-              <Text style={commonStyles.textSecondary}>
-                Télécharger une copie de vos données
-              </Text>
-            </View>
-            <Icon name="chevron-forward" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
+              <Text style={commonStyles.settingButtonText}>Exporter mes données</Text>
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={[commonStyles.card, { 
-              flexDirection: 'row', 
-              alignItems: 'center',
-              backgroundColor: colors.error + '10',
-              borderColor: colors.error,
-            }]}
-            onPress={handleResetApp}
-          >
-            <View style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: colors.error + '20',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginRight: 16,
-            }}>
-              <Icon name="refresh" size={20} color={colors.error} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[commonStyles.text, { fontWeight: '600', color: colors.error }]}>
-                Réinitialiser l&apos;application
+          {/* Danger Zone */}
+          <View style={commonStyles.section}>
+            <Text style={[commonStyles.sectionTitle, { color: colors.error }]}>
+              Zone de danger
+            </Text>
+            
+            <TouchableOpacity
+              style={[commonStyles.settingButton, { borderColor: colors.error }]}
+              onPress={handleResetApp}
+            >
+              <Icon name="alert-triangle" size={20} color={colors.error} />
+              <Text style={[commonStyles.settingButtonText, { color: colors.error }]}>
+                Réinitialiser l'application
               </Text>
-              <Text style={[commonStyles.textSecondary, { color: colors.error }]}>
-                Supprimer toutes les données locales
-              </Text>
-            </View>
-            <Icon name="chevron-forward" size={20} color={colors.error} />
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
         </View>
-
-        {/* Bottom spacing for navigation */}
-        <View style={{ height: 120 }} />
       </ScrollView>
     </SafeAreaView>
   );

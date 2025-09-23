@@ -3,243 +3,225 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { commonStyles, colors } from '../styles/commonStyles';
 import Icon from '../components/Icon';
+import { useAuth } from '../hooks/useAuth';
+import { commonStyles, colors } from '../styles/commonStyles';
 
 export default function OnboardingScreen() {
-  const [step, setStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(1);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
-  const [otpCode, setOtpCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const { sendOtp, verifyOtp } = useAuth();
 
-  const handleNextStep = () => {
-    console.log('Moving to step:', step + 1);
-    
-    if (step === 1) {
+  const handleNextStep = async () => {
+    if (currentStep === 1) {
       if (!phoneNumber.trim()) {
         Alert.alert('Erreur', 'Veuillez saisir votre numéro de téléphone');
         return;
       }
-      // In a real app, send OTP here
-      setStep(2);
-    } else if (step === 2) {
-      if (!otpCode.trim() || otpCode.length !== 6) {
-        Alert.alert('Erreur', 'Veuillez saisir le code à 6 chiffres');
+
+      setIsLoading(true);
+      console.log('Sending OTP to:', phoneNumber);
+      
+      const result = await sendOtp(phoneNumber);
+      setIsLoading(false);
+
+      if (result.success) {
+        setCurrentStep(2);
+        Alert.alert(
+          'Code envoyé', 
+          'Un code de vérification a été envoyé à votre numéro de téléphone'
+        );
+      } else {
+        Alert.alert('Erreur', result.error || 'Impossible d\'envoyer le code');
+      }
+    } else if (currentStep === 2) {
+      if (!otp.trim() || otp.length !== 4) {
+        Alert.alert('Erreur', 'Veuillez saisir le code à 4 chiffres');
         return;
       }
-      setStep(3);
-    } else if (step === 3) {
+
+      setIsLoading(true);
+      console.log('Verifying OTP:', otp);
+      
+      const result = await verifyOtp(phoneNumber, otp);
+      setIsLoading(false);
+
+      if (result.success) {
+        setCurrentStep(3);
+      } else {
+        Alert.alert('Erreur', result.error || 'Code de vérification incorrect');
+      }
+    } else if (currentStep === 3) {
       if (!name.trim()) {
-        Alert.alert('Erreur', 'Veuillez saisir votre nom complet');
+        Alert.alert('Erreur', 'Veuillez saisir votre nom');
         return;
       }
-      // Complete registration
-      Alert.alert(
-        'Inscription réussie !',
-        'Bienvenue dans Tontine App. Vous pouvez maintenant créer ou rejoindre des tontines.',
-        [
-          {
-            text: 'Commencer',
-            onPress: () => router.replace('/'),
-          },
-        ]
-      );
+
+      // Complete onboarding
+      console.log('Onboarding completed for:', name);
+      router.replace('/');
     }
   };
 
   const handlePreviousStep = () => {
-    if (step > 1) {
-      setStep(step - 1);
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
     }
   };
 
   const renderStep1 = () => (
-    <View style={{ flex: 1, justifyContent: 'center' }}>
-      <View style={{ alignItems: 'center', marginBottom: 40 }}>
-        <View style={{
-          width: 80,
-          height: 80,
-          borderRadius: 40,
-          backgroundColor: colors.primary,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 24,
-        }}>
-          <Icon name="phone-portrait" size={40} color={colors.backgroundAlt} />
+    <View style={commonStyles.container}>
+      <View style={commonStyles.header}>
+        <Text style={commonStyles.title}>Bienvenue !</Text>
+        <Text style={commonStyles.subtitle}>
+          Commençons par vérifier votre numéro de téléphone
+        </Text>
+      </View>
+
+      <View style={commonStyles.content}>
+        <View style={commonStyles.inputContainer}>
+          <Text style={commonStyles.label}>Numéro de téléphone</Text>
+          <TextInput
+            style={commonStyles.input}
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            placeholder="+225 XX XX XX XX XX"
+            keyboardType="phone-pad"
+            autoFocus
+          />
         </View>
-        <Text style={[commonStyles.title, { textAlign: 'center', marginBottom: 8 }]}>
-          Votre numéro de téléphone
-        </Text>
-        <Text style={[commonStyles.textSecondary, { textAlign: 'center' }]}>
-          Nous utiliserons votre numéro pour sécuriser votre compte et les paiements
+
+        <Text style={commonStyles.helperText}>
+          Nous utiliserons ce numéro pour vous identifier et vous envoyer des notifications importantes.
         </Text>
       </View>
 
-      <View style={{ marginBottom: 40 }}>
-        <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 8 }]}>
-          Numéro de téléphone
-        </Text>
-        <TextInput
-          style={commonStyles.input}
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
-          placeholder="+225 07 12 34 56 78"
-          placeholderTextColor={colors.textSecondary}
-          keyboardType="phone-pad"
-        />
+      <View style={commonStyles.footer}>
+        <TouchableOpacity
+          style={[commonStyles.button, commonStyles.primaryButton]}
+          onPress={handleNextStep}
+          disabled={isLoading}
+        >
+          <Text style={commonStyles.buttonText}>
+            {isLoading ? 'Envoi...' : 'Continuer'}
+          </Text>
+        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        style={commonStyles.button}
-        onPress={handleNextStep}
-      >
-        <Text style={commonStyles.buttonText}>Continuer</Text>
-      </TouchableOpacity>
     </View>
   );
 
   const renderStep2 = () => (
-    <View style={{ flex: 1, justifyContent: 'center' }}>
-      <View style={{ alignItems: 'center', marginBottom: 40 }}>
-        <View style={{
-          width: 80,
-          height: 80,
-          borderRadius: 40,
-          backgroundColor: colors.success,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 24,
-        }}>
-          <Icon name="shield-checkmark" size={40} color={colors.backgroundAlt} />
-        </View>
-        <Text style={[commonStyles.title, { textAlign: 'center', marginBottom: 8 }]}>
-          Vérification
-        </Text>
-        <Text style={[commonStyles.textSecondary, { textAlign: 'center' }]}>
-          Nous avons envoyé un code de vérification au {phoneNumber}
+    <View style={commonStyles.container}>
+      <TouchableOpacity
+        style={commonStyles.backButton}
+        onPress={handlePreviousStep}
+      >
+        <Icon name="arrow-left" size={24} color={colors.text} />
+      </TouchableOpacity>
+
+      <View style={commonStyles.header}>
+        <Text style={commonStyles.title}>Vérification</Text>
+        <Text style={commonStyles.subtitle}>
+          Saisissez le code à 4 chiffres envoyé au {phoneNumber}
         </Text>
       </View>
 
-      <View style={{ marginBottom: 40 }}>
-        <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 8 }]}>
-          Code de vérification
-        </Text>
-        <TextInput
-          style={[commonStyles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8 }]}
-          value={otpCode}
-          onChangeText={setOtpCode}
-          placeholder="123456"
-          placeholderTextColor={colors.textSecondary}
-          keyboardType="numeric"
-          maxLength={6}
-        />
-        <TouchableOpacity style={{ alignSelf: 'center', marginTop: 16 }}>
-          <Text style={[commonStyles.textSecondary, { textDecorationLine: 'underline' }]}>
-            Renvoyer le code
+      <View style={commonStyles.content}>
+        <View style={commonStyles.inputContainer}>
+          <Text style={commonStyles.label}>Code de vérification</Text>
+          <TextInput
+            style={[commonStyles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8 }]}
+            value={otp}
+            onChangeText={setOtp}
+            placeholder="0000"
+            keyboardType="numeric"
+            maxLength={4}
+            autoFocus
+          />
+        </View>
+
+        <TouchableOpacity
+          style={commonStyles.linkButton}
+          onPress={() => {
+            setCurrentStep(1);
+            setOtp('');
+          }}
+        >
+          <Text style={commonStyles.linkText}>
+            Modifier le numéro de téléphone
           </Text>
         </TouchableOpacity>
       </View>
 
-      <View style={{ gap: 12 }}>
+      <View style={commonStyles.footer}>
         <TouchableOpacity
-          style={commonStyles.button}
+          style={[commonStyles.button, commonStyles.primaryButton]}
           onPress={handleNextStep}
+          disabled={isLoading}
         >
-          <Text style={commonStyles.buttonText}>Vérifier</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={commonStyles.buttonSecondary}
-          onPress={handlePreviousStep}
-        >
-          <Text style={commonStyles.buttonSecondaryText}>Retour</Text>
+          <Text style={commonStyles.buttonText}>
+            {isLoading ? 'Vérification...' : 'Vérifier'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   const renderStep3 = () => (
-    <View style={{ flex: 1, justifyContent: 'center' }}>
-      <View style={{ alignItems: 'center', marginBottom: 40 }}>
-        <View style={{
-          width: 80,
-          height: 80,
-          borderRadius: 40,
-          backgroundColor: colors.accent,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 24,
-        }}>
-          <Icon name="person" size={40} color={colors.backgroundAlt} />
+    <View style={commonStyles.container}>
+      <TouchableOpacity
+        style={commonStyles.backButton}
+        onPress={handlePreviousStep}
+      >
+        <Icon name="arrow-left" size={24} color={colors.text} />
+      </TouchableOpacity>
+
+      <View style={commonStyles.header}>
+        <Text style={commonStyles.title}>Presque fini !</Text>
+        <Text style={commonStyles.subtitle}>
+          Comment souhaitez-vous être appelé ?
+        </Text>
+      </View>
+
+      <View style={commonStyles.content}>
+        <View style={commonStyles.inputContainer}>
+          <Text style={commonStyles.label}>Votre nom</Text>
+          <TextInput
+            style={commonStyles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="Ex: Jean Kouassi"
+            autoFocus
+          />
         </View>
-        <Text style={[commonStyles.title, { textAlign: 'center', marginBottom: 8 }]}>
-          Votre profil
-        </Text>
-        <Text style={[commonStyles.textSecondary, { textAlign: 'center' }]}>
-          Dites-nous comment vous appeler
+
+        <Text style={commonStyles.helperText}>
+          Ce nom sera visible par les autres membres de vos tontines.
         </Text>
       </View>
 
-      <View style={{ marginBottom: 40 }}>
-        <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 8 }]}>
-          Nom complet
-        </Text>
-        <TextInput
-          style={commonStyles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="Kouassi Jean Baptiste"
-          placeholderTextColor={colors.textSecondary}
-        />
-      </View>
-
-      <View style={{ gap: 12 }}>
+      <View style={commonStyles.footer}>
         <TouchableOpacity
-          style={commonStyles.button}
+          style={[commonStyles.button, commonStyles.primaryButton]}
           onPress={handleNextStep}
         >
           <Text style={commonStyles.buttonText}>Terminer</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={commonStyles.buttonSecondary}
-          onPress={handlePreviousStep}
-        >
-          <Text style={commonStyles.buttonSecondaryText}>Retour</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={commonStyles.container}>
-      <View style={commonStyles.content}>
-        {/* Progress Indicator */}
-        <View style={{ 
-          flexDirection: 'row', 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          paddingVertical: 20,
-          gap: 8,
-        }}>
-          {[1, 2, 3].map((stepNumber) => (
-            <View
-              key={stepNumber}
-              style={{
-                width: stepNumber === step ? 24 : 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: stepNumber <= step ? colors.primary : colors.border,
-              }}
-            />
-          ))}
-        </View>
-
-        {/* Step Content */}
-        {step === 1 && renderStep1()}
-        {step === 2 && renderStep2()}
-        {step === 3 && renderStep3()}
-      </View>
+    <SafeAreaView style={commonStyles.safeArea}>
+      <ScrollView style={commonStyles.scrollView} showsVerticalScrollIndicator={false}>
+        {currentStep === 1 && renderStep1()}
+        {currentStep === 2 && renderStep2()}
+        {currentStep === 3 && renderStep3()}
+      </ScrollView>
     </SafeAreaView>
   );
 }

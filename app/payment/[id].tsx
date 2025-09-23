@@ -3,246 +3,189 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { commonStyles, colors } from '../../styles/commonStyles';
-import { getTontineById, formatCurrency, currentUser } from '../../data/mockData';
-import { Tontine, PaymentMethod } from '../../types';
 import Icon from '../../components/Icon';
-
-const paymentMethods: { id: PaymentMethod; name: string; icon: string; color: string }[] = [
-  { id: 'orange', name: 'Orange Money', icon: 'phone-portrait', color: '#FF6600' },
-  { id: 'mtn', name: 'MTN Mobile Money', icon: 'phone-portrait', color: '#FFCC00' },
-  { id: 'wave', name: 'Wave', icon: 'phone-portrait', color: '#00D4FF' },
-];
+import { useSync } from '../../hooks/useSync';
+import { paymentService, PAYMENT_PROVIDERS } from '../../services/paymentService';
+import { getTontineById, formatCurrency, currentUser } from '../../data/mockData';
+import { commonStyles, colors } from '../../styles/commonStyles';
+import { Tontine, PaymentMethod } from '../../types';
 
 export default function PaymentScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams();
   const [tontine, setTontine] = useState<Tontine | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('orange');
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const { forceSyncTontine } = useSync();
 
   useEffect(() => {
     if (id) {
-      const tontineData = getTontineById(id);
+      const tontineData = getTontineById(id as string);
       setTontine(tontineData || null);
-      console.log('Loaded tontine for payment:', tontineData?.name);
+      console.log('Payment screen loaded for tontine:', tontineData?.name);
     }
   }, [id]);
 
   const handlePayment = async () => {
-    if (!tontine) return;
+    if (!tontine || !selectedMethod) {
+      Alert.alert('Erreur', 'Veuillez sélectionner un mode de paiement');
+      return;
+    }
 
-    console.log('Processing payment:', {
-      tontineId: tontine.id,
-      amount: tontine.contributionAmount,
-      method: selectedMethod,
-    });
+    try {
+      setIsProcessing(true);
+      console.log('Initiating payment:', {
+        tontine: tontine.name,
+        amount: tontine.contributionAmount,
+        method: selectedMethod,
+      });
 
-    setIsProcessing(true);
-
-    // Simulate payment processing
-    setTimeout(() => {
-      setIsProcessing(false);
-      Alert.alert(
-        'Paiement réussi !',
-        `Votre cotisation de ${formatCurrency(tontine.contributionAmount)} a été payée avec succès via ${paymentMethods.find(m => m.id === selectedMethod)?.name}.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
+      const result = await paymentService.initiatePayment(
+        tontine.id,
+        tontine.contributionAmount,
+        selectedMethod
       );
-    }, 2000);
+
+      if (result.success && result.paymentUrl) {
+        console.log('Payment initiated successfully');
+        
+        // Open payment URL
+        const openResult = await paymentService.openPaymentUrl(result.paymentUrl);
+        
+        if (openResult.success) {
+          Alert.alert(
+            'Paiement en cours',
+            'Vous allez être redirigé vers votre application de paiement. Revenez dans l\'app une fois le paiement terminé.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Navigate back and wait for payment callback
+                  router.back();
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert('Erreur', openResult.error || 'Impossible d\'ouvrir le lien de paiement');
+        }
+      } else {
+        Alert.alert('Erreur', result.error || 'Impossible d\'initier le paiement');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors du paiement');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleMethodSelect = (method: PaymentMethod) => {
     setSelectedMethod(method);
-    console.log('Selected payment method:', method);
+    console.log('Payment method selected:', method);
   };
 
   if (!tontine) {
     return (
-      <SafeAreaView style={commonStyles.container}>
-        <View style={[commonStyles.content, { justifyContent: 'center', alignItems: 'center' }]}>
-          <Text style={commonStyles.text}>Tontine non trouvée</Text>
-          <TouchableOpacity
-            style={[commonStyles.button, { marginTop: 20 }]}
-            onPress={() => router.back()}
-          >
-            <Text style={commonStyles.buttonText}>Retour</Text>
-          </TouchableOpacity>
+      <SafeAreaView style={commonStyles.safeArea}>
+        <View style={[commonStyles.container, commonStyles.centerContent]}>
+          <Text style={commonStyles.text}>Tontine introuvable</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const currentUserMember = tontine.members.find(m => m.userId === currentUser.id);
-
   return (
-    <SafeAreaView style={commonStyles.container}>
-      <ScrollView style={commonStyles.content} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={{ 
-          flexDirection: 'row', 
-          alignItems: 'center',
-          paddingVertical: 20,
-        }}>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
-            <Icon name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={commonStyles.title}>Paiement</Text>
-        </View>
+    <SafeAreaView style={commonStyles.safeArea}>
+      <ScrollView style={commonStyles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={commonStyles.container}>
+          {/* Header */}
+          <View style={commonStyles.header}>
+            <TouchableOpacity
+              style={commonStyles.backButton}
+              onPress={() => router.back()}
+            >
+              <Icon name="arrow-left" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={commonStyles.title}>Paiement</Text>
+          </View>
 
-        {/* Payment Summary */}
-        <View style={[commonStyles.card, { marginBottom: 24, backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
-          <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 16, color: colors.primary }]}>
-            Résumé du paiement
-          </Text>
-          
-          <View style={{ gap: 12 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={commonStyles.textSecondary}>Tontine</Text>
-              <Text style={commonStyles.text}>{tontine.name}</Text>
-            </View>
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={commonStyles.textSecondary}>Tour</Text>
-              <Text style={commonStyles.text}>{tontine.currentRound} / {tontine.totalRounds}</Text>
-            </View>
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={commonStyles.textSecondary}>Montant à payer</Text>
-              <Text style={[commonStyles.text, { fontSize: 18, fontWeight: '700', color: colors.primary }]}>
+          {/* Payment Details */}
+          <View style={commonStyles.card}>
+            <Text style={commonStyles.cardTitle}>{tontine.name}</Text>
+            <View style={commonStyles.row}>
+              <Text style={commonStyles.label}>Montant à payer</Text>
+              <Text style={[commonStyles.value, { color: colors.primary, fontSize: 24, fontWeight: 'bold' }]}>
                 {formatCurrency(tontine.contributionAmount)}
               </Text>
             </View>
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={commonStyles.textSecondary}>Frais de service</Text>
-              <Text style={commonStyles.text}>Gratuit</Text>
+            <View style={commonStyles.row}>
+              <Text style={commonStyles.label}>Fréquence</Text>
+              <Text style={commonStyles.value}>
+                {tontine.frequency === 'weekly' ? 'Hebdomadaire' : 'Mensuelle'}
+              </Text>
             </View>
-            
-            <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 8 }} />
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={[commonStyles.text, { fontWeight: '600' }]}>Total</Text>
-              <Text style={[commonStyles.text, { fontSize: 18, fontWeight: '700', color: colors.primary }]}>
-                {formatCurrency(tontine.contributionAmount)}
+            <View style={commonStyles.row}>
+              <Text style={commonStyles.label}>Prochaine échéance</Text>
+              <Text style={commonStyles.value}>
+                {new Date(tontine.nextPaymentDate).toLocaleDateString('fr-FR')}
               </Text>
             </View>
           </View>
-        </View>
 
-        {/* Payment Methods */}
-        <View style={commonStyles.section}>
-          <Text style={[commonStyles.subtitle, { marginBottom: 16 }]}>
-            Choisir un moyen de paiement
-          </Text>
-          
-          {paymentMethods.map((method) => (
-            <TouchableOpacity
-              key={method.id}
-              style={[
-                commonStyles.card,
-                { 
-                  marginBottom: 12,
-                  borderColor: selectedMethod === method.id ? colors.primary : colors.border,
-                  borderWidth: selectedMethod === method.id ? 2 : 1,
-                }
-              ]}
-              onPress={() => handleMethodSelect(method.id)}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{
-                  width: 50,
-                  height: 50,
-                  borderRadius: 25,
-                  backgroundColor: method.color + '20',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 16,
-                }}>
-                  <Icon name={method.icon as any} size={24} color={method.color} />
+          {/* Payment Methods */}
+          <View style={commonStyles.section}>
+            <Text style={commonStyles.sectionTitle}>Mode de paiement</Text>
+            
+            {PAYMENT_PROVIDERS.map((provider) => (
+              <TouchableOpacity
+                key={provider.id}
+                style={[
+                  commonStyles.paymentMethod,
+                  selectedMethod === provider.id && commonStyles.paymentMethodSelected,
+                ]}
+                onPress={() => handleMethodSelect(provider.id)}
+              >
+                <View style={commonStyles.paymentMethodContent}>
+                  <View style={[commonStyles.paymentMethodIcon, { backgroundColor: provider.color }]}>
+                    <Icon name={provider.icon} size={24} color="white" />
+                  </View>
+                  <Text style={commonStyles.paymentMethodName}>{provider.name}</Text>
                 </View>
-                
-                <View style={{ flex: 1 }}>
-                  <Text style={[commonStyles.text, { fontWeight: '600' }]}>
-                    {method.name}
-                  </Text>
-                  <Text style={commonStyles.textSecondary}>
-                    Paiement sécurisé et instantané
-                  </Text>
-                </View>
-
-                <View style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 10,
-                  borderWidth: 2,
-                  borderColor: selectedMethod === method.id ? colors.primary : colors.border,
-                  backgroundColor: selectedMethod === method.id ? colors.primary : 'transparent',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  {selectedMethod === method.id && (
-                    <View style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: colors.backgroundAlt,
-                    }} />
+                <View style={[
+                  commonStyles.radio,
+                  selectedMethod === provider.id && commonStyles.radioSelected,
+                ]}>
+                  {selectedMethod === provider.id && (
+                    <View style={commonStyles.radioInner} />
                   )}
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* Payment Instructions */}
-        <View style={[commonStyles.card, { marginBottom: 24, backgroundColor: colors.background }]}>
-          <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 12 }]}>
-            Instructions
-          </Text>
-          <View style={{ gap: 8 }}>
-            <Text style={commonStyles.textSecondary}>
-              • Assurez-vous d&apos;avoir suffisamment de solde sur votre compte
-            </Text>
-            <Text style={commonStyles.textSecondary}>
-              • Le paiement sera traité instantanément
-            </Text>
-            <Text style={commonStyles.textSecondary}>
-              • Vous recevrez une confirmation par SMS
-            </Text>
-            <Text style={commonStyles.textSecondary}>
-              • En cas de problème, contactez le support
+          {/* Security Notice */}
+          <View style={commonStyles.securityNotice}>
+            <Icon name="shield-check" size={20} color={colors.success} />
+            <Text style={commonStyles.securityText}>
+              Vos paiements sont sécurisés et cryptés
             </Text>
           </View>
-        </View>
 
-        {/* Pay Button */}
-        <TouchableOpacity
-          style={[
-            commonStyles.button,
-            { 
-              marginBottom: 24,
-              opacity: isProcessing ? 0.7 : 1,
-            }
-          ]}
-          onPress={handlePayment}
-          disabled={isProcessing}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-            {isProcessing && (
-              <Icon name="hourglass" size={20} color={colors.backgroundAlt} style={{ marginRight: 8 }} />
-            )}
+          {/* Payment Button */}
+          <TouchableOpacity
+            style={[
+              commonStyles.button,
+              commonStyles.primaryButton,
+              (!selectedMethod || isProcessing) && commonStyles.buttonDisabled,
+            ]}
+            onPress={handlePayment}
+            disabled={!selectedMethod || isProcessing}
+          >
             <Text style={commonStyles.buttonText}>
-              {isProcessing ? 'Traitement en cours...' : `Payer ${formatCurrency(tontine.contributionAmount)}`}
+              {isProcessing ? 'Traitement...' : `Payer ${formatCurrency(tontine.contributionAmount)}`}
             </Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Bottom spacing */}
-        <View style={{ height: 100 }} />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

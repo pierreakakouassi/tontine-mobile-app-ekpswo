@@ -1,5 +1,4 @@
 
-#!/usr/bin/env node
 /**
  * Script de build automatisé pour la production
  * 

@@ -12,6 +12,8 @@ export default function OnboardingScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
+  const [language, setLanguage] = useState('fr');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
   const { sendOtp, verifyOtp } = useAuth();
@@ -61,9 +63,23 @@ export default function OnboardingScreen() {
         return;
       }
 
+      if (!acceptedTerms) {
+        Alert.alert('Erreur', 'Veuillez accepter les conditions d\'utilisation');
+        return;
+      }
+
       // Complete onboarding
-      console.log('Onboarding completed for:', name);
-      router.replace('/');
+      console.log('Onboarding completed for:', { name, language, phoneNumber });
+      Alert.alert(
+        'Bienvenue !',
+        'Votre compte a été créé avec succès. Vous pouvez maintenant créer ou rejoindre une tontine.',
+        [
+          {
+            text: 'Commencer',
+            onPress: () => router.replace('/'),
+          },
+        ]
+      );
     }
   };
 
@@ -181,15 +197,15 @@ export default function OnboardingScreen() {
       </TouchableOpacity>
 
       <View style={commonStyles.header}>
-        <Text style={commonStyles.title}>Presque fini !</Text>
+        <Text style={commonStyles.title}>Profil minimal</Text>
         <Text style={commonStyles.subtitle}>
-          Comment souhaitez-vous être appelé ?
+          Quelques informations pour finaliser votre compte
         </Text>
       </View>
 
       <View style={commonStyles.content}>
         <View style={commonStyles.inputContainer}>
-          <Text style={commonStyles.label}>Votre nom</Text>
+          <Text style={commonStyles.label}>Votre nom *</Text>
           <TextInput
             style={commonStyles.input}
             value={name}
@@ -199,7 +215,76 @@ export default function OnboardingScreen() {
           />
         </View>
 
-        <Text style={commonStyles.helperText}>
+        <View style={commonStyles.inputContainer}>
+          <Text style={commonStyles.label}>Langue préférée</Text>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+            <TouchableOpacity
+              style={[
+                commonStyles.buttonSecondary,
+                { flex: 1 },
+                language === 'fr' && { backgroundColor: colors.primary, borderColor: colors.primary }
+              ]}
+              onPress={() => setLanguage('fr')}
+            >
+              <Text style={[
+                commonStyles.buttonSecondaryText,
+                language === 'fr' && { color: colors.backgroundAlt }
+              ]}>
+                Français
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                commonStyles.buttonSecondary,
+                { flex: 1 },
+                language === 'nouchi' && { backgroundColor: colors.primary, borderColor: colors.primary }
+              ]}
+              onPress={() => setLanguage('nouchi')}
+            >
+              <Text style={[
+                commonStyles.buttonSecondaryText,
+                language === 'nouchi' && { color: colors.backgroundAlt }
+              ]}>
+                Nouchi FR
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={{ marginTop: 20 }}>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center' }}
+            onPress={() => setAcceptedTerms(!acceptedTerms)}
+          >
+            <View style={{
+              width: 20,
+              height: 20,
+              borderRadius: 4,
+              borderWidth: 2,
+              borderColor: acceptedTerms ? colors.primary : colors.border,
+              backgroundColor: acceptedTerms ? colors.primary : 'transparent',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 12,
+            }}>
+              {acceptedTerms && (
+                <Icon name="checkmark" size={12} color={colors.backgroundAlt} />
+              )}
+            </View>
+            <Text style={[commonStyles.text, { flex: 1, fontSize: 14 }]}>
+              J&apos;accepte les{' '}
+              <Text style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+                conditions d&apos;utilisation
+              </Text>
+              {' '}et la{' '}
+              <Text style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+                politique de confidentialité
+              </Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[commonStyles.helperText, { marginTop: 16 }]}>
           Ce nom sera visible par les autres membres de vos tontines.
         </Text>
       </View>

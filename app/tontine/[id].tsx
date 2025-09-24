@@ -153,6 +153,37 @@ export default function TontineDashboardScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Transparency Section */}
+        <View style={commonStyles.section}>
+          <Text style={[commonStyles.subtitle, { marginBottom: 16 }]}>
+            Transparence en temps réel
+          </Text>
+          
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+            <TouchableOpacity
+              style={[commonStyles.buttonSecondary, { flex: 1 }]}
+              onPress={() => Alert.alert('Calendrier', 'Affichage du calendrier des paiements à venir')}
+            >
+              <Icon name="calendar" size={16} color={colors.primary} style={{ marginBottom: 4 }} />
+              <Text style={[commonStyles.buttonSecondaryText, { fontSize: 12 }]}>Calendrier</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[commonStyles.buttonSecondary, { flex: 1 }]}
+              onPress={() => Alert.alert('Historique', 'Affichage de l\'historique complet des transactions')}
+            >
+              <Icon name="time" size={16} color={colors.primary} style={{ marginBottom: 4 }} />
+              <Text style={[commonStyles.buttonSecondaryText, { fontSize: 12 }]}>Historique</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[commonStyles.buttonSecondary, { flex: 1 }]}
+              onPress={() => Alert.alert('Statistiques', 'Affichage des statistiques détaillées')}
+            >
+              <Icon name="analytics" size={16} color={colors.primary} style={{ marginBottom: 4 }} />
+              <Text style={[commonStyles.buttonSecondaryText, { fontSize: 12 }]}>Stats</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Members List */}
         <View style={commonStyles.section}>
           <Text style={[commonStyles.subtitle, { marginBottom: 16 }]}>

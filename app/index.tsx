@@ -21,7 +21,24 @@ export default function HomeScreen() {
 
   const handleJoinTontine = () => {
     console.log('Navigate to join tontine');
-    Alert.alert('Rejoindre une tontine', 'Fonctionnalité à venir - Vous pourrez rejoindre une tontine avec un code d\'invitation');
+    Alert.prompt(
+      'Rejoindre une tontine',
+      'Saisissez le code d\'invitation ou le lien WhatsApp:',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { 
+          text: 'Rejoindre', 
+          onPress: (code) => {
+            if (code && code.trim()) {
+              Alert.alert('Succès', `Demande envoyée pour rejoindre la tontine avec le code: ${code}`);
+            }
+          }
+        }
+      ],
+      'plain-text',
+      '',
+      'default'
+    );
   };
 
   const handleTontinePress = (tontineId: string) => {
@@ -46,7 +63,15 @@ export default function HomeScreen() {
         }}>
           <View>
             <Text style={commonStyles.title}>Bonjour {currentUser.name.split(' ')[0]} 👋</Text>
-            <Text style={commonStyles.textSecondary}>Gérez vos tontines facilement</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+              <Text style={commonStyles.textSecondary}>Score de fiabilité: </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Icon name="star" size={16} color={colors.warning} />
+                <Text style={[commonStyles.text, { fontWeight: '600', marginLeft: 4, color: colors.warning }]}>
+                  {currentUser.reliabilityScore}%
+                </Text>
+              </View>
+            </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <TouchableOpacity 
@@ -88,14 +113,14 @@ export default function HomeScreen() {
               onPress={handleCreateTontine}
             >
               <Icon name="add-circle" size={20} color={colors.backgroundAlt} style={{ marginBottom: 4 }} />
-              <Text style={commonStyles.buttonText}>Créer</Text>
+              <Text style={commonStyles.buttonText}>Créer une tontine</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[commonStyles.buttonSecondary, { flex: 1 }]}
               onPress={handleJoinTontine}
             >
               <Icon name="people" size={20} color={colors.primary} style={{ marginBottom: 4 }} />
-              <Text style={commonStyles.buttonSecondaryText}>Rejoindre</Text>
+              <Text style={commonStyles.buttonSecondaryText}>Rejoindre via code</Text>
             </TouchableOpacity>
           </View>
         </View>

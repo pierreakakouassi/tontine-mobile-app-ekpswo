@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { commonStyles, colors } from '../styles/commonStyles';
 import { CreateTontineData } from '../types';
+import { formatCurrency } from '../data/mockData';
 import Icon from '../components/Icon';
 
 export default function CreateTontineScreen() {
@@ -16,6 +17,8 @@ export default function CreateTontineScreen() {
     frequency: 'weekly',
     drawOrder: 'manual',
   });
+
+  const [currentStep, setCurrentStep] = useState(1);
 
   const handleInputChange = (field: keyof CreateTontineData, value: string | number) => {
     setFormData(prev => ({
@@ -44,12 +47,23 @@ export default function CreateTontineScreen() {
     }
 
     // In a real app, this would call an API
+    // Generate invitation code
+    const invitationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    
     Alert.alert(
       'Tontine créée !',
-      `"${formData.name}" a été créée avec succès. Vous pouvez maintenant inviter des membres.`,
+      `"${formData.name}" a été créée avec succès.\n\nCode d'invitation: ${invitationCode}\n\nPartagez ce code avec vos amis pour qu'ils puissent rejoindre votre tontine.`,
       [
         {
-          text: 'OK',
+          text: 'Partager via WhatsApp',
+          onPress: () => {
+            const message = `🎯 Rejoignez ma tontine "${formData.name}"!\n\n💰 Cotisation: ${formatCurrency(formData.contributionAmount)} / ${formData.frequency === 'weekly' ? 'semaine' : 'mois'}\n👥 ${formData.memberCount} membres\n\nCode: ${invitationCode}\n\nTéléchargez TontineCI et utilisez ce code pour nous rejoindre!`;
+            console.log('Share WhatsApp message:', message);
+            Alert.alert('Message préparé', 'Le message WhatsApp a été préparé. Copiez-le et partagez-le avec vos contacts.');
+          },
+        },
+        {
+          text: 'Continuer',
           onPress: () => router.back(),
         },
       ]
@@ -68,21 +82,40 @@ export default function CreateTontineScreen() {
           <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
             <Icon name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={commonStyles.title}>Créer une tontine</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={commonStyles.title}>Créer une tontine</Text>
+            <Text style={commonStyles.textSecondary}>Étape 1 - Paramètres</Text>
+          </View>
         </View>
 
         {/* Form */}
         <View style={commonStyles.section}>
           <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 8 }]}>
-            Nom de la tontine *
+            Nom du cercle *
           </Text>
           <TextInput
             style={commonStyles.input}
             value={formData.name}
             onChangeText={(value) => handleInputChange('name', value)}
-            placeholder="Ex: Cercle des amis"
+            placeholder="Ex: Cercle des amis, Tontine bureau..."
             placeholderTextColor={colors.textSecondary}
           />
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+            <Text style={[commonStyles.text, { fontWeight: '600', marginRight: 8 }]}>
+              Devise:
+            </Text>
+            <View style={{
+              backgroundColor: colors.primary + '20',
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 16,
+            }}>
+              <Text style={[commonStyles.text, { color: colors.primary, fontWeight: '600' }]}>
+                FCFA (par défaut)
+              </Text>
+            </View>
+          </View>
 
           <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 8 }]}>
             Description (optionnel)
@@ -97,7 +130,7 @@ export default function CreateTontineScreen() {
           />
 
           <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 8 }]}>
-            Nombre de membres *
+            Durée (nombre de tours = membres) *
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
             <TouchableOpacity
@@ -114,9 +147,14 @@ export default function CreateTontineScreen() {
             >
               <Icon name="remove" size={20} color={colors.text} />
             </TouchableOpacity>
-            <Text style={[commonStyles.text, { fontSize: 18, fontWeight: '600', minWidth: 40, textAlign: 'center' }]}>
-              {formData.memberCount}
-            </Text>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[commonStyles.text, { fontSize: 18, fontWeight: '600', minWidth: 40, textAlign: 'center' }]}>
+                {formData.memberCount}
+              </Text>
+              <Text style={[commonStyles.textSecondary, { fontSize: 12 }]}>
+                membres
+              </Text>
+            </View>
             <TouchableOpacity
               style={{
                 backgroundColor: colors.primary,
@@ -146,7 +184,7 @@ export default function CreateTontineScreen() {
           />
 
           <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 8 }]}>
-            Fréquence de cotisation *
+            Fréquence (hebdo/mensuelle) *
           </Text>
           <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
             <TouchableOpacity

@@ -36,10 +36,10 @@ export default function WelcomeScreen() {
           </View>
           
           <Text style={[commonStyles.title, { fontSize: 32, textAlign: 'center', marginBottom: 16 }]}>
-            Tontine App
+            TontineCI
           </Text>
           <Text style={[commonStyles.textSecondary, { fontSize: 18, textAlign: 'center', marginBottom: 40 }]}>
-            Épargnez ensemble, gagnez ensemble
+            Créer/rejoindre une tontine en 2 minutes
           </Text>
         </View>
 
@@ -55,14 +55,14 @@ export default function WelcomeScreen() {
               justifyContent: 'center',
               marginRight: 16,
             }}>
-              <Icon name="people" size={24} color={colors.success} />
+              <Icon name="card" size={24} color={colors.success} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 4 }]}>
-                Créez votre cercle
+                Mobile Money intégré
               </Text>
               <Text style={commonStyles.textSecondary}>
-                Invitez vos amis, famille ou collègues
+                Orange/MTN/Wave ou cash enregistré
               </Text>
             </View>
           </View>
@@ -77,14 +77,14 @@ export default function WelcomeScreen() {
               justifyContent: 'center',
               marginRight: 16,
             }}>
-              <Icon name="card" size={24} color={colors.primary} />
+              <Icon name="eye" size={24} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 4 }]}>
-                Paiements sécurisés
+                Transparence totale
               </Text>
               <Text style={commonStyles.textSecondary}>
-                Orange Money, MTN, Wave intégrés
+                Qui a payé, qui reçoit, calendrier, historique
               </Text>
             </View>
           </View>
@@ -99,14 +99,14 @@ export default function WelcomeScreen() {
               justifyContent: 'center',
               marginRight: 16,
             }}>
-              <Icon name="notifications" size={24} color={colors.warning} />
+              <Icon name="chatbubbles" size={24} color={colors.warning} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 4 }]}>
                 Rappels automatiques
               </Text>
               <Text style={commonStyles.textSecondary}>
-                WhatsApp et SMS pour ne rien oublier
+                WhatsApp/SMS pour ne jamais oublier
               </Text>
             </View>
           </View>
@@ -121,14 +121,14 @@ export default function WelcomeScreen() {
               justifyContent: 'center',
               marginRight: 16,
             }}>
-              <Icon name="analytics" size={24} color={colors.accent} />
+              <Icon name="star" size={24} color={colors.accent} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 4 }]}>
-                Suivi en temps réel
+                Score de fiabilité
               </Text>
               <Text style={commonStyles.textSecondary}>
-                Tableau de bord complet et transparent
+                Évaluation des membres basée sur l'historique
               </Text>
             </View>
           </View>
@@ -140,14 +140,14 @@ export default function WelcomeScreen() {
             style={commonStyles.button}
             onPress={handleGetStarted}
           >
-            <Text style={commonStyles.buttonText}>Commencer</Text>
+            <Text style={commonStyles.buttonText}>Créer un compte</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={commonStyles.buttonSecondary}
             onPress={handleLogin}
           >
-            <Text style={commonStyles.buttonSecondaryText}>J&apos;ai déjà un compte</Text>
+            <Text style={commonStyles.buttonSecondaryText}>Se connecter</Text>
           </TouchableOpacity>
         </View>
 

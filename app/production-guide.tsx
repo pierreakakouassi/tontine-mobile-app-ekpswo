@@ -344,6 +344,93 @@ export default function ProductionGuideScreen() {
     }
   }, [updateStepStatus]);
 
+  const showFirebaseGuide = useCallback(() => {
+    Alert.alert(
+      'Configuration Firebase',
+      '🔥 Firebase Cloud Messaging:\n\n' +
+      '📋 Étapes de configuration:\n' +
+      '1. Créez un projet Firebase\n' +
+      '2. Ajoutez vos apps iOS/Android\n' +
+      '3. Téléchargez google-services.json\n' +
+      '4. Configurez les certificats push iOS\n' +
+      '5. Testez les notifications\n\n' +
+      '🔄 Alternative recommandée:\n' +
+      'Utilisez Expo Push Notifications (plus simple)\n\n' +
+      '💡 Expo Push est déjà intégré dans l\'app!',
+      [
+        { text: 'Annuler' },
+        { text: 'Utiliser Expo Push', onPress: () => testNotifications() },
+        { text: 'Firebase Console', onPress: () => Linking.openURL('https://console.firebase.google.com') }
+      ]
+    );
+  }, [testNotifications]);
+
+  const showOrangeApiGuide = useCallback(() => {
+    Alert.alert(
+      'API Orange Money',
+      '🟠 Intégration Orange Money CI:\n\n' +
+      '📞 Étapes d\'intégration:\n' +
+      '1. Contactez Orange Côte d\'Ivoire\n' +
+      '   📧 Email: api-support@orange.ci\n' +
+      '   📱 Tel: +225 07 07 07 07\n\n' +
+      '2. Présentez votre projet tontine\n' +
+      '3. Demandez l\'accès API Orange Money\n' +
+      '4. Obtenez vos clés (client_id, client_secret)\n' +
+      '5. Testez en mode sandbox\n' +
+      '6. Demandez l\'activation production\n\n' +
+      '💰 Frais: ~2-3% par transaction\n' +
+      '📚 Documentation: developer.orange.com',
+      [
+        { text: 'Annuler' },
+        { text: 'Configurer', onPress: () => showOrangeConfig() },
+        { text: 'Documentation', onPress: () => Linking.openURL('https://developer.orange.com') }
+      ]
+    );
+  }, [showOrangeConfig]);
+
+  const showMtnApiGuide = useCallback(() => {
+    Alert.alert(
+      'API MTN Mobile Money',
+      '🟡 Intégration MTN MoMo CI:\n\n' +
+      '🌐 Étapes d\'intégration:\n' +
+      '1. Visitez momodeveloper.mtn.com\n' +
+      '2. Créez un compte développeur\n' +
+      '3. Souscrivez au produit "Collections"\n' +
+      '4. Obtenez vos clés API\n' +
+      '5. Testez en sandbox\n' +
+      '6. Demandez l\'accès production\n\n' +
+      '💰 Frais: ~2-3% par transaction\n' +
+      '⏱️ Délai d\'approbation: 2-4 semaines',
+      [
+        { text: 'Annuler' },
+        { text: 'Configurer', onPress: () => showMtnConfig() },
+        { text: 'Site MTN', onPress: () => Linking.openURL('https://momodeveloper.mtn.com') }
+      ]
+    );
+  }, [showMtnConfig]);
+
+  const showWaveApiGuide = useCallback(() => {
+    Alert.alert(
+      'API Wave',
+      '🔵 Intégration Wave CI:\n\n' +
+      '📞 Étapes d\'intégration:\n' +
+      '1. Contactez Wave directement\n' +
+      '   📧 Email: developers@wave.com\n' +
+      '   📱 WhatsApp: +221 77 xxx xx xx\n\n' +
+      '2. Présentez votre projet tontine\n' +
+      '3. Négociez les conditions\n' +
+      '4. Obtenez l\'accès API\n' +
+      '5. Intégrez et testez\n\n' +
+      '💡 Avantage: Wave est généralement plus ouvert aux fintechs locales\n' +
+      '💰 Frais négociables selon le volume',
+      [
+        { text: 'Annuler' },
+        { text: 'Configurer', onPress: () => showWaveConfig() },
+        { text: 'Contacter Wave', onPress: () => Linking.openURL('mailto:developers@wave.com') }
+      ]
+    );
+  }, [showWaveConfig]);
+
   const initializeSteps = useCallback(() => {
     const productionSteps: ProductionStep[] = [
       // Backend Configuration
@@ -493,7 +580,7 @@ export default function ProductionGuideScreen() {
     ];
 
     setSteps(productionSteps);
-  }, [showBackendGuide, showDatabaseGuide, showOrangeApiGuide, showMtnApiGuide, showWaveApiGuide, showFirebaseGuide, testNotifications]);
+  }, [showBackendGuide, showDatabaseGuide, showOrangeApiGuide, showMtnApiGuide, showWaveApiGuide, showFirebaseGuide, testNotifications, showPaymentSecurityGuide, showAppStoreAssetsGuide, showIosSubmissionGuide, showAndroidSubmissionGuide, showUserTestingGuide, showPaymentTestingGuide, showSecurityAuditGuide]);
 
   const checkCurrentStatus = useCallback(async () => {
     try {

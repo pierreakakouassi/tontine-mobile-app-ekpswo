@@ -18,8 +18,6 @@ export default function CreateTontineScreen() {
     drawOrder: 'manual',
   });
 
-  const [currentStep, setCurrentStep] = useState(1);
-
   const handleInputChange = (field: keyof CreateTontineData, value: string | number) => {
     setFormData(prev => ({
       ...prev,
@@ -28,8 +26,8 @@ export default function CreateTontineScreen() {
     console.log(`Updated ${field}:`, value);
   };
 
-  const handleCreateTontine = () => {
-    console.log('Creating tontine with data:', formData);
+  const handleContinue = () => {
+    console.log('Validating form data:', formData);
     
     if (!formData.name.trim()) {
       Alert.alert('Erreur', 'Veuillez saisir un nom pour la tontine');
@@ -46,28 +44,11 @@ export default function CreateTontineScreen() {
       return;
     }
 
-    // In a real app, this would call an API
-    // Generate invitation code
-    const invitationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    
-    Alert.alert(
-      'Tontine créée !',
-      `"${formData.name}" a été créée avec succès.\n\nCode d'invitation: ${invitationCode}\n\nPartagez ce code avec vos amis pour qu'ils puissent rejoindre votre tontine.`,
-      [
-        {
-          text: 'Partager via WhatsApp',
-          onPress: () => {
-            const message = `🎯 Rejoignez ma tontine "${formData.name}"!\n\n💰 Cotisation: ${formatCurrency(formData.contributionAmount)} / ${formData.frequency === 'weekly' ? 'semaine' : 'mois'}\n👥 ${formData.memberCount} membres\n\nCode: ${invitationCode}\n\nTéléchargez TontineCI et utilisez ce code pour nous rejoindre!`;
-            console.log('Share WhatsApp message:', message);
-            Alert.alert('Message préparé', 'Le message WhatsApp a été préparé. Copiez-le et partagez-le avec vos contacts.');
-          },
-        },
-        {
-          text: 'Continuer',
-          onPress: () => router.back(),
-        },
-      ]
-    );
+    // Navigate to step 2 with form data
+    router.push({
+      pathname: '/create-tontine/step2-members',
+      params: { tontineData: JSON.stringify(formData) }
+    });
   };
 
   return (
@@ -86,6 +67,14 @@ export default function CreateTontineScreen() {
             <Text style={commonStyles.title}>Créer une tontine</Text>
             <Text style={commonStyles.textSecondary}>Étape 1 - Paramètres</Text>
           </View>
+        </View>
+
+        {/* Progress Indicator */}
+        <View style={{ flexDirection: 'row', marginBottom: 24, gap: 8 }}>
+          <View style={{ flex: 1, height: 4, backgroundColor: colors.primary, borderRadius: 2 }} />
+          <View style={{ flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2 }} />
+          <View style={{ flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2 }} />
+          <View style={{ flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2 }} />
         </View>
 
         {/* Form */}
@@ -278,9 +267,9 @@ export default function CreateTontineScreen() {
 
           <TouchableOpacity
             style={[commonStyles.button, { marginTop: 24 }]}
-            onPress={handleCreateTontine}
+            onPress={handleContinue}
           >
-            <Text style={commonStyles.buttonText}>Créer la tontine</Text>
+            <Text style={commonStyles.buttonText}>Continuer - Ajouter des membres</Text>
           </TouchableOpacity>
         </View>
 

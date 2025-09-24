@@ -15,16 +15,43 @@ export default function ProfileScreen() {
     Alert.alert('Modifier le profil', 'Fonctionnalité à venir');
   };
 
-  const handleNotificationSettings = () => {
-    console.log('Notification settings');
-    Alert.alert('Notifications', 'Fonctionnalité à venir');
+  const handleLanguageSettings = () => {
+    Alert.alert(
+      'Langue',
+      'Choisissez votre langue préférée:',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Français', onPress: () => console.log('Language set to French') },
+        { text: 'Nouchi FR', onPress: () => console.log('Language set to Nouchi') },
+        { text: 'English', onPress: () => console.log('Language set to English') }
+      ]
+    );
+  };
+
+  const handlePaymentMethodSettings = () => {
+    Alert.alert(
+      'Méthode de paiement par défaut',
+      'Choisissez votre méthode préférée:',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Orange Money', onPress: () => console.log('Default payment: Orange') },
+        { text: 'MTN MoMo', onPress: () => console.log('Default payment: MTN') },
+        { text: 'Wave', onPress: () => console.log('Default payment: Wave') }
+      ]
+    );
   };
 
   const handleSupport = () => {
     console.log('Support');
     Alert.alert(
-      'Support',
-      'Contactez-nous:\n\n📞 +225 07 00 00 00 00\n📧 support@tontineapp.ci\n💬 WhatsApp: +225 07 00 00 00 00'
+      'Support & Aide',
+      'Comment pouvons-nous vous aider ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'FAQ', onPress: () => router.push('/help') },
+        { text: 'Contacter par WhatsApp', onPress: () => console.log('Contact WhatsApp') },
+        { text: 'Contacter par Email', onPress: () => console.log('Contact Email') }
+      ]
     );
   };
 
@@ -40,12 +67,60 @@ export default function ProfileScreen() {
     );
   };
 
+  const showReliabilityDetails = () => {
+    const totalTontines = userTontines.length;
+    const completedTontines = userTontines.filter(t => t.status === 'completed').length;
+    const activeTontines = userTontines.filter(t => t.status === 'active').length;
+    
+    // Calculate reliability metrics
+    const totalPaymentsDue = userTontines.reduce((sum, tontine) => {
+      const userMember = tontine.members.find(m => m.userId === currentUser.id);
+      return sum + (tontine.currentRound * (userMember ? 1 : 0));
+    }, 0);
+    
+    const onTimePayments = totalPaymentsDue; // Mock: assume all payments were on time
+    const latePayments = 0; // Mock: no late payments
+    const punctualityRate = totalPaymentsDue > 0 ? (onTimePayments / totalPaymentsDue) * 100 : 100;
+    
+    const accountAge = Math.floor((Date.now() - currentUser.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+    
+    Alert.alert(
+      'Score de fiabilité détaillé',
+      `🎯 Score global: ${currentUser.reliabilityScore}%\n\n` +
+      `📊 Détails du calcul:\n` +
+      `• Ponctualité des paiements: ${punctualityRate.toFixed(1)}%\n` +
+      `• Tontines complétées: ${completedTontines}/${totalTontines}\n` +
+      `• Paiements à l'heure: ${onTimePayments}/${totalPaymentsDue}\n` +
+      `• Retards: ${latePayments}\n` +
+      `• Ancienneté du compte: ${accountAge} jours\n` +
+      `• Litiges: 0\n\n` +
+      `💡 Comment améliorer votre score:\n` +
+      `• Payez toujours à temps\n` +
+      `• Complétez vos tontines\n` +
+      `• Évitez les litiges\n` +
+      `• Restez actif sur l'app`,
+      [{ text: 'Compris' }]
+    );
+  };
+
   const totalContributions = userTontines.reduce((sum, tontine) => {
     const userMember = tontine.members.find(m => m.userId === currentUser.id);
     return sum + (userMember?.totalContributions || 0);
   }, 0);
 
   const activeTontines = userTontines.filter(t => t.status === 'active').length;
+  const completedTontines = userTontines.filter(t => t.status === 'completed').length;
+
+  // Calculate total received from completed tontines
+  const totalReceived = userTontines.reduce((sum, tontine) => {
+    if (tontine.status === 'completed') {
+      const userMember = tontine.members.find(m => m.userId === currentUser.id);
+      if (userMember?.hasReceived) {
+        return sum + (tontine.contributionAmount * tontine.memberCount);
+      }
+    }
+    return sum;
+  }, 0);
 
   return (
     <SafeAreaView style={commonStyles.container}>
@@ -85,12 +160,16 @@ export default function ProfileScreen() {
             {currentUser.phoneNumber}
           </Text>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}
+            onPress={showReliabilityDetails}
+          >
             <Icon name="star" size={16} color={colors.warning} style={{ marginRight: 4 }} />
             <Text style={[commonStyles.text, { fontWeight: '600', color: colors.warning }]}>
               Score de fiabilité: {currentUser.reliabilityScore}%
             </Text>
-          </View>
+            <Icon name="information-circle" size={14} color={colors.textSecondary} style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[commonStyles.buttonSecondary, { paddingHorizontal: 24 }]}
@@ -122,10 +201,26 @@ export default function ProfileScreen() {
             </View>
             
             <View style={{ alignItems: 'center' }}>
-              <Text style={[commonStyles.text, { fontSize: 18, fontWeight: '700', color: colors.warning }]}>
+              <Text style={[commonStyles.text, { fontSize: 24, fontWeight: '700', color: colors.warning }]}>
+                {completedTontines}
+              </Text>
+              <Text style={commonStyles.textSecondary}>Terminées</Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[commonStyles.text, { fontSize: 18, fontWeight: '700', color: colors.accent }]}>
                 {formatCurrency(totalContributions).replace(' FCFA', '')}
               </Text>
               <Text style={commonStyles.textSecondary}>Cotisé</Text>
+            </View>
+            
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[commonStyles.text, { fontSize: 18, fontWeight: '700', color: colors.success }]}>
+                {formatCurrency(totalReceived).replace(' FCFA', '')}
+              </Text>
+              <Text style={commonStyles.textSecondary}>Reçu</Text>
             </View>
           </View>
 
@@ -136,6 +231,7 @@ export default function ProfileScreen() {
             padding: 12,
             borderWidth: 1,
             borderColor: colors.border,
+            marginTop: 16,
           }}>
             <Text style={[commonStyles.text, { fontWeight: '600', marginBottom: 8, fontSize: 14 }]}>
               Indicateurs de fiabilité
@@ -155,21 +251,27 @@ export default function ProfileScreen() {
               </View>
               <View style={{ alignItems: 'center' }}>
                 <Text style={[commonStyles.text, { fontSize: 16, fontWeight: '600', color: colors.warning }]}>
-                  {Math.floor(Math.random() * 30) + 10}j
+                  {Math.floor((Date.now() - currentUser.createdAt.getTime()) / (1000 * 60 * 60 * 24))}j
                 </Text>
                 <Text style={[commonStyles.textSecondary, { fontSize: 12 }]}>Ancienneté</Text>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={[commonStyles.text, { fontSize: 16, fontWeight: '600', color: colors.success }]}>
+                  0
+                </Text>
+                <Text style={[commonStyles.textSecondary, { fontSize: 12 }]}>Litiges</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Menu Options */}
+        {/* Settings Menu */}
         <View style={commonStyles.section}>
           <Text style={[commonStyles.subtitle, { marginBottom: 16 }]}>Paramètres</Text>
           
           <TouchableOpacity
             style={[commonStyles.card, { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }]}
-            onPress={() => router.push('/settings')}
+            onPress={handleLanguageSettings}
           >
             <View style={{
               width: 40,
@@ -180,15 +282,86 @@ export default function ProfileScreen() {
               justifyContent: 'center',
               marginRight: 16,
             }}>
-              <Icon name="settings" size={20} color={colors.primary} />
+              <Icon name="language" size={20} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[commonStyles.text, { fontWeight: '600' }]}>Paramètres</Text>
-              <Text style={commonStyles.textSecondary}>Notifications, préférences et données</Text>
+              <Text style={[commonStyles.text, { fontWeight: '600' }]}>Langue</Text>
+              <Text style={commonStyles.textSecondary}>Français (par défaut)</Text>
             </View>
             <Icon name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[commonStyles.card, { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }]}
+            onPress={() => router.push('/notifications')}
+          >
+            <View style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: colors.warning + '20',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 16,
+            }}>
+              <Icon name="notifications" size={20} color={colors.warning} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[commonStyles.text, { fontWeight: '600' }]}>Notifications</Text>
+              <Text style={commonStyles.textSecondary}>Rappels et alertes</Text>
+            </View>
+            <Icon name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[commonStyles.card, { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }]}
+            onPress={handlePaymentMethodSettings}
+          >
+            <View style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: colors.success + '20',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 16,
+            }}>
+              <Icon name="card" size={20} color={colors.success} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[commonStyles.text, { fontWeight: '600' }]}>Moyen de paiement par défaut</Text>
+              <Text style={commonStyles.textSecondary}>Orange Money</Text>
+            </View>
+            <Icon name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[commonStyles.card, { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }]}
+            onPress={() => router.push('/settings')}
+          >
+            <View style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: colors.accent + '20',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 16,
+            }}>
+              <Icon name="settings" size={20} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[commonStyles.text, { fontWeight: '600' }]}>Paramètres avancés</Text>
+              <Text style={commonStyles.textSecondary}>Données, synchronisation, sécurité</Text>
+            </View>
+            <Icon name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Support & Help */}
+        <View style={commonStyles.section}>
+          <Text style={[commonStyles.subtitle, { marginBottom: 16 }]}>Support & Aide</Text>
+          
           <TouchableOpacity
             style={[commonStyles.card, { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }]}
             onPress={() => router.push('/help')}
@@ -206,29 +379,51 @@ export default function ProfileScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[commonStyles.text, { fontWeight: '600' }]}>Aide & FAQ</Text>
-              <Text style={commonStyles.textSecondary}>Questions fréquentes et support</Text>
+              <Text style={commonStyles.textSecondary}>Questions fréquentes et guides</Text>
             </View>
             <Icon name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[commonStyles.card, { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }]}
-            onPress={() => Alert.alert('À propos', 'Tontine App v1.0.0\nDéveloppé avec ❤️ en Côte d\'Ivoire')}
+            onPress={handleSupport}
           >
             <View style={{
               width: 40,
               height: 40,
               borderRadius: 20,
-              backgroundColor: colors.accent + '20',
+              backgroundColor: colors.primary + '20',
               alignItems: 'center',
               justifyContent: 'center',
               marginRight: 16,
             }}>
-              <Icon name="information-circle" size={20} color={colors.accent} />
+              <Icon name="chatbubble-ellipses" size={20} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[commonStyles.text, { fontWeight: '600' }]}>À propos</Text>
-              <Text style={commonStyles.textSecondary}>Version et informations</Text>
+              <Text style={[commonStyles.text, { fontWeight: '600' }]}>Contacter le support</Text>
+              <Text style={commonStyles.textSecondary}>WhatsApp, Email, Téléphone</Text>
+            </View>
+            <Icon name="chevron-forward" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[commonStyles.card, { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }]}
+            onPress={() => Alert.alert('À propos', 'Tontine CI v1.0.0\n\n🇨🇮 Développé avec ❤️ en Côte d\'Ivoire\n\n📱 La première app de tontine digitale ivoirienne\n\n🎯 Mission: Démocratiser l\'épargne collective\n\n👥 Équipe: Développeurs locaux passionnés\n\n📧 Contact: hello@tontine-ci.com')}
+          >
+            <View style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: colors.warning + '20',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 16,
+            }}>
+              <Icon name="information-circle" size={20} color={colors.warning} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[commonStyles.text, { fontWeight: '600' }]}>À propos de Tontine CI</Text>
+              <Text style={commonStyles.textSecondary}>Version, équipe et mission</Text>
             </View>
             <Icon name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>

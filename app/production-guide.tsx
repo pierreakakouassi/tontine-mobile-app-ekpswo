@@ -33,6 +33,317 @@ export default function ProductionGuideScreen() {
     setApiUrl(config.apiBaseUrl);
   }, []);
 
+  const updateStepStatus = useCallback((stepId: string, status: ProductionStep['status']) => {
+    setSteps(prev => prev.map(step => 
+      step.id === stepId ? { ...step, status } : step
+    ));
+  }, []);
+
+  const showBackendGuide = useCallback(() => {
+    Alert.alert(
+      'Déploiement Backend',
+      '🚀 Options de déploiement recommandées:\n\n' +
+      '• Heroku (facile, payant)\n' +
+      '• DigitalOcean (flexible, abordable)\n' +
+      '• Railway (moderne, simple)\n' +
+      '• Render (gratuit pour commencer)\n' +
+      '• AWS/GCP (scalable, complexe)\n\n' +
+      '✅ Checklist obligatoire:\n' +
+      '• HTTPS activé (SSL/TLS)\n' +
+      '• Variables d\'environnement sécurisées\n' +
+      '• Base de données PostgreSQL\n' +
+      '• Monitoring et logs\n' +
+      '• Sauvegardes automatiques\n' +
+      '• Rate limiting\n' +
+      '• CORS configuré',
+      [
+        { text: 'Annuler' },
+        { text: 'Guide Heroku', onPress: () => Linking.openURL('https://devcenter.heroku.com/articles/deploying-nodejs') },
+        { text: 'Guide Railway', onPress: () => Linking.openURL('https://docs.railway.app/deploy/deployments') }
+      ]
+    );
+  }, []);
+
+  const showDatabaseGuide = useCallback(() => {
+    Alert.alert(
+      'Configuration Base de Données',
+      '🗄️ PostgreSQL en production:\n\n' +
+      '📋 Services recommandés:\n' +
+      '• Supabase (gratuit + payant)\n' +
+      '• AWS RDS (scalable)\n' +
+      '• DigitalOcean Managed DB\n' +
+      '• Railway PostgreSQL\n' +
+      '• Heroku Postgres\n\n' +
+      '⚙️ Configuration requise:\n' +
+      '• SSL/TLS activé\n' +
+      '• Sauvegardes automatiques quotidiennes\n' +
+      '• Monitoring des performances\n' +
+      '• Connection pooling\n' +
+      '• Réplication (optionnel)',
+      [
+        { text: 'Annuler' },
+        { text: 'Supabase', onPress: () => Linking.openURL('https://supabase.com') }
+      ]
+    );
+  }, []);
+
+  const showOrangeApiGuide = useCallback(() => {
+    Alert.alert(
+      'API Orange Money',
+      '🟠 Intégration Orange Money CI:\n\n' +
+      '📞 Étapes d\'intégration:\n' +
+      '1. Contactez Orange Côte d\'Ivoire\n' +
+      '   📧 Email: api-support@orange.ci\n' +
+      '   📱 Tel: +225 07 07 07 07\n\n' +
+      '2. Présentez votre projet tontine\n' +
+      '3. Demandez l\'accès API Orange Money\n' +
+      '4. Obtenez vos clés (client_id, client_secret)\n' +
+      '5. Testez en mode sandbox\n' +
+      '6. Demandez l\'activation production\n\n' +
+      '💰 Frais: ~2-3% par transaction\n' +
+      '📚 Documentation: developer.orange.com',
+      [
+        { text: 'Annuler' },
+        { text: 'Configurer', onPress: () => showOrangeConfig() },
+        { text: 'Documentation', onPress: () => Linking.openURL('https://developer.orange.com') }
+      ]
+    );
+  }, []);
+
+  const showOrangeConfig = useCallback(() => {
+    Alert.prompt(
+      'Configuration Orange Money',
+      'Entrez votre Client ID Orange Money:',
+      [
+        { text: 'Annuler' },
+        { 
+          text: 'Suivant', 
+          onPress: (clientId) => {
+            if (clientId) {
+              Alert.prompt(
+                'Configuration Orange Money',
+                'Entrez votre Client Secret:',
+                [
+                  { text: 'Annuler' },
+                  { 
+                    text: 'Configurer', 
+                    onPress: async (clientSecret) => {
+                      if (clientSecret) {
+                        try {
+                          await productionService.configureOrangeMoney({
+                            clientId,
+                            clientSecret,
+                            sandboxMode: !productionService.isProduction(),
+                          });
+                          updateStepStatus('orange-api', 'completed');
+                          Alert.alert('Succès', 'Orange Money configuré!');
+                        } catch (error) {
+                          Alert.alert('Erreur', 'Configuration échouée');
+                        }
+                      }
+                    }
+                  }
+                ]
+              );
+            }
+          }
+        }
+      ]
+    );
+  }, [updateStepStatus]);
+
+  const showMtnApiGuide = useCallback(() => {
+    Alert.alert(
+      'API MTN Mobile Money',
+      '🟡 Intégration MTN MoMo CI:\n\n' +
+      '🌐 Étapes d\'intégration:\n' +
+      '1. Visitez momodeveloper.mtn.com\n' +
+      '2. Créez un compte développeur\n' +
+      '3. Souscrivez au produit "Collections"\n' +
+      '4. Obtenez vos clés API\n' +
+      '5. Testez en sandbox\n' +
+      '6. Demandez l\'accès production\n\n' +
+      '💰 Frais: ~2-3% par transaction\n' +
+      '⏱️ Délai d\'approbation: 2-4 semaines',
+      [
+        { text: 'Annuler' },
+        { text: 'Configurer', onPress: () => showMtnConfig() },
+        { text: 'Site MTN', onPress: () => Linking.openURL('https://momodeveloper.mtn.com') }
+      ]
+    );
+  }, []);
+
+  const showMtnConfig = useCallback(() => {
+    Alert.prompt(
+      'Configuration MTN MoMo',
+      'Entrez votre Subscription Key:',
+      [
+        { text: 'Annuler' },
+        { 
+          text: 'Suivant', 
+          onPress: (subscriptionKey) => {
+            if (subscriptionKey) {
+              Alert.prompt(
+                'Configuration MTN MoMo',
+                'Entrez votre User ID:',
+                [
+                  { text: 'Annuler' },
+                  { 
+                    text: 'Suivant', 
+                    onPress: (userId) => {
+                      if (userId) {
+                        Alert.prompt(
+                          'Configuration MTN MoMo',
+                          'Entrez votre API Key:',
+                          [
+                            { text: 'Annuler' },
+                            { 
+                              text: 'Configurer', 
+                              onPress: async (apiKey) => {
+                                if (apiKey) {
+                                  try {
+                                    await productionService.configureMtnMomo({
+                                      subscriptionKey,
+                                      userId,
+                                      apiKey,
+                                      sandboxMode: !productionService.isProduction(),
+                                    });
+                                    updateStepStatus('mtn-api', 'completed');
+                                    Alert.alert('Succès', 'MTN MoMo configuré!');
+                                  } catch (error) {
+                                    Alert.alert('Erreur', 'Configuration échouée');
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        );
+                      }
+                    }
+                  }
+                ]
+              );
+            }
+          }
+        }
+      ]
+    );
+  }, [updateStepStatus]);
+
+  const showWaveApiGuide = useCallback(() => {
+    Alert.alert(
+      'API Wave',
+      '🔵 Intégration Wave CI:\n\n' +
+      '📞 Étapes d\'intégration:\n' +
+      '1. Contactez Wave directement\n' +
+      '   📧 Email: developers@wave.com\n' +
+      '   📱 WhatsApp: +221 77 xxx xx xx\n\n' +
+      '2. Présentez votre projet tontine\n' +
+      '3. Négociez les conditions\n' +
+      '4. Obtenez l\'accès API\n' +
+      '5. Intégrez et testez\n\n' +
+      '💡 Avantage: Wave est généralement plus ouvert aux fintechs locales\n' +
+      '💰 Frais négociables selon le volume',
+      [
+        { text: 'Annuler' },
+        { text: 'Configurer', onPress: () => showWaveConfig() },
+        { text: 'Contacter Wave', onPress: () => Linking.openURL('mailto:developers@wave.com') }
+      ]
+    );
+  }, []);
+
+  const showWaveConfig = useCallback(() => {
+    Alert.prompt(
+      'Configuration Wave',
+      'Entrez votre API Key Wave:',
+      [
+        { text: 'Annuler' },
+        { 
+          text: 'Suivant', 
+          onPress: (apiKey) => {
+            if (apiKey) {
+              Alert.prompt(
+                'Configuration Wave',
+                'Entrez votre Secret Key:',
+                [
+                  { text: 'Annuler' },
+                  { 
+                    text: 'Configurer', 
+                    onPress: async (secretKey) => {
+                      if (secretKey) {
+                        try {
+                          await productionService.configureWave({
+                            apiKey,
+                            secretKey,
+                            sandboxMode: !productionService.isProduction(),
+                          });
+                          updateStepStatus('wave-api', 'completed');
+                          Alert.alert('Succès', 'Wave configuré!');
+                        } catch (error) {
+                          Alert.alert('Erreur', 'Configuration échouée');
+                        }
+                      }
+                    }
+                  }
+                ]
+              );
+            }
+          }
+        }
+      ]
+    );
+  }, [updateStepStatus]);
+
+  const showFirebaseGuide = useCallback(() => {
+    Alert.alert(
+      'Configuration Firebase',
+      '🔥 Firebase Cloud Messaging:\n\n' +
+      '📋 Étapes de configuration:\n' +
+      '1. Créez un projet Firebase\n' +
+      '2. Ajoutez vos apps iOS/Android\n' +
+      '3. Téléchargez google-services.json\n' +
+      '4. Configurez les certificats push iOS\n' +
+      '5. Testez les notifications\n\n' +
+      '🔄 Alternative recommandée:\n' +
+      'Utilisez Expo Push Notifications (plus simple)\n\n' +
+      '💡 Expo Push est déjà intégré dans l\'app!',
+      [
+        { text: 'Annuler' },
+        { text: 'Utiliser Expo Push', onPress: () => testNotifications() },
+        { text: 'Firebase Console', onPress: () => Linking.openURL('https://console.firebase.google.com') }
+      ]
+    );
+  }, []);
+
+  const testNotifications = useCallback(async () => {
+    try {
+      updateStepStatus('expo-notifications', 'in-progress');
+      
+      const result = await notificationService.initialize();
+      if (result.success) {
+        await notificationService.scheduleLocalNotification({
+          title: '🎉 Test de notification',
+          body: 'Les notifications fonctionnent parfaitement!',
+          trigger: { seconds: 2 }
+        });
+        
+        // Configure notifications in production service
+        await productionService.configureNotifications({
+          firebaseProjectId: 'tontine-app-ci',
+        });
+        
+        updateStepStatus('expo-notifications', 'completed');
+        Alert.alert('✅ Succès', 'Notification de test programmée!\nLes notifications push sont configurées.');
+      } else {
+        updateStepStatus('expo-notifications', 'error');
+        Alert.alert('❌ Erreur', result.error || 'Échec du test de notification');
+      }
+    } catch (error) {
+      updateStepStatus('expo-notifications', 'error');
+      Alert.alert('❌ Erreur', 'Échec du test de notification');
+    }
+  }, [updateStepStatus]);
+
   const initializeSteps = useCallback(() => {
     const productionSteps: ProductionStep[] = [
       // Backend Configuration
@@ -182,7 +493,7 @@ export default function ProductionGuideScreen() {
     ];
 
     setSteps(productionSteps);
-  }, []);
+  }, [showBackendGuide, showDatabaseGuide, showOrangeApiGuide, showMtnApiGuide, showWaveApiGuide, showFirebaseGuide, testNotifications]);
 
   const checkCurrentStatus = useCallback(async () => {
     try {
@@ -225,19 +536,13 @@ export default function ProductionGuideScreen() {
     } catch (error) {
       console.error('Status check failed:', error);
     }
-  }, []);
+  }, [updateStepStatus]);
 
   useEffect(() => {
     initializeSteps();
     checkCurrentStatus();
     loadCurrentApiUrl();
   }, [initializeSteps, checkCurrentStatus, loadCurrentApiUrl]);
-
-  const updateStepStatus = (stepId: string, status: ProductionStep['status']) => {
-    setSteps(prev => prev.map(step => 
-      step.id === stepId ? { ...step, status } : step
-    ));
-  };
 
   const updateApiUrl = async () => {
     try {
@@ -262,261 +567,6 @@ export default function ProductionGuideScreen() {
     }
   };
 
-  const showBackendGuide = () => {
-    Alert.alert(
-      'Déploiement Backend',
-      '🚀 Options de déploiement recommandées:\n\n' +
-      '• Heroku (facile, payant)\n' +
-      '• DigitalOcean (flexible, abordable)\n' +
-      '• Railway (moderne, simple)\n' +
-      '• Render (gratuit pour commencer)\n' +
-      '• AWS/GCP (scalable, complexe)\n\n' +
-      '✅ Checklist obligatoire:\n' +
-      '• HTTPS activé (SSL/TLS)\n' +
-      '• Variables d\'environnement sécurisées\n' +
-      '• Base de données PostgreSQL\n' +
-      '• Monitoring et logs\n' +
-      '• Sauvegardes automatiques\n' +
-      '• Rate limiting\n' +
-      '• CORS configuré',
-      [
-        { text: 'Annuler' },
-        { text: 'Guide Heroku', onPress: () => Linking.openURL('https://devcenter.heroku.com/articles/deploying-nodejs') },
-        { text: 'Guide Railway', onPress: () => Linking.openURL('https://docs.railway.app/deploy/deployments') }
-      ]
-    );
-  };
-
-  const showDatabaseGuide = () => {
-    Alert.alert(
-      'Configuration Base de Données',
-      '🗄️ PostgreSQL en production:\n\n' +
-      '📋 Services recommandés:\n' +
-      '• Supabase (gratuit + payant)\n' +
-      '• AWS RDS (scalable)\n' +
-      '• DigitalOcean Managed DB\n' +
-      '• Railway PostgreSQL\n' +
-      '• Heroku Postgres\n\n' +
-      '⚙️ Configuration requise:\n' +
-      '• SSL/TLS activé\n' +
-      '• Sauvegardes automatiques quotidiennes\n' +
-      '• Monitoring des performances\n' +
-      '• Connection pooling\n' +
-      '• Réplication (optionnel)',
-      [
-        { text: 'Annuler' },
-        { text: 'Supabase', onPress: () => Linking.openURL('https://supabase.com') }
-      ]
-    );
-  };
-
-  const showOrangeApiGuide = () => {
-    Alert.alert(
-      'API Orange Money',
-      '🟠 Intégration Orange Money CI:\n\n' +
-      '📞 Étapes d\'intégration:\n' +
-      '1. Contactez Orange Côte d\'Ivoire\n' +
-      '   📧 Email: api-support@orange.ci\n' +
-      '   📱 Tel: +225 07 07 07 07\n\n' +
-      '2. Présentez votre projet tontine\n' +
-      '3. Demandez l\'accès API Orange Money\n' +
-      '4. Obtenez vos clés (client_id, client_secret)\n' +
-      '5. Testez en mode sandbox\n' +
-      '6. Demandez l\'activation production\n\n' +
-      '💰 Frais: ~2-3% par transaction\n' +
-      '📚 Documentation: developer.orange.com',
-      [
-        { text: 'Annuler' },
-        { text: 'Configurer', onPress: () => showOrangeConfig() },
-        { text: 'Documentation', onPress: () => Linking.openURL('https://developer.orange.com') }
-      ]
-    );
-  };
-
-  const showOrangeConfig = () => {
-    Alert.prompt(
-      'Configuration Orange Money',
-      'Entrez votre Client ID Orange Money:',
-      [
-        { text: 'Annuler' },
-        { 
-          text: 'Suivant', 
-          onPress: (clientId) => {
-            if (clientId) {
-              Alert.prompt(
-                'Configuration Orange Money',
-                'Entrez votre Client Secret:',
-                [
-                  { text: 'Annuler' },
-                  { 
-                    text: 'Configurer', 
-                    onPress: async (clientSecret) => {
-                      if (clientSecret) {
-                        try {
-                          await productionService.configureOrangeMoney({
-                            clientId,
-                            clientSecret,
-                            sandboxMode: !productionService.isProduction(),
-                          });
-                          updateStepStatus('orange-api', 'completed');
-                          Alert.alert('Succès', 'Orange Money configuré!');
-                        } catch (error) {
-                          Alert.alert('Erreur', 'Configuration échouée');
-                        }
-                      }
-                    }
-                  }
-                ]
-              );
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const showMtnApiGuide = () => {
-    Alert.alert(
-      'API MTN Mobile Money',
-      '🟡 Intégration MTN MoMo CI:\n\n' +
-      '🌐 Étapes d\'intégration:\n' +
-      '1. Visitez momodeveloper.mtn.com\n' +
-      '2. Créez un compte développeur\n' +
-      '3. Souscrivez au produit "Collections"\n' +
-      '4. Obtenez vos clés API\n' +
-      '5. Testez en sandbox\n' +
-      '6. Demandez l\'accès production\n\n' +
-      '💰 Frais: ~2-3% par transaction\n' +
-      '⏱️ Délai d\'approbation: 2-4 semaines',
-      [
-        { text: 'Annuler' },
-        { text: 'Configurer', onPress: () => showMtnConfig() },
-        { text: 'Site MTN', onPress: () => Linking.openURL('https://momodeveloper.mtn.com') }
-      ]
-    );
-  };
-
-  const showMtnConfig = () => {
-    Alert.prompt(
-      'Configuration MTN MoMo',
-      'Entrez votre Subscription Key:',
-      [
-        { text: 'Annuler' },
-        { 
-          text: 'Suivant', 
-          onPress: (subscriptionKey) => {
-            if (subscriptionKey) {
-              Alert.prompt(
-                'Configuration MTN MoMo',
-                'Entrez votre User ID:',
-                [
-                  { text: 'Annuler' },
-                  { 
-                    text: 'Suivant', 
-                    onPress: (userId) => {
-                      if (userId) {
-                        Alert.prompt(
-                          'Configuration MTN MoMo',
-                          'Entrez votre API Key:',
-                          [
-                            { text: 'Annuler' },
-                            { 
-                              text: 'Configurer', 
-                              onPress: async (apiKey) => {
-                                if (apiKey) {
-                                  try {
-                                    await productionService.configureMtnMomo({
-                                      subscriptionKey,
-                                      userId,
-                                      apiKey,
-                                      sandboxMode: !productionService.isProduction(),
-                                    });
-                                    updateStepStatus('mtn-api', 'completed');
-                                    Alert.alert('Succès', 'MTN MoMo configuré!');
-                                  } catch (error) {
-                                    Alert.alert('Erreur', 'Configuration échouée');
-                                  }
-                                }
-                              }
-                            }
-                          ]
-                        );
-                      }
-                    }
-                  }
-                ]
-              );
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const showWaveApiGuide = () => {
-    Alert.alert(
-      'API Wave',
-      '🔵 Intégration Wave CI:\n\n' +
-      '📞 Étapes d\'intégration:\n' +
-      '1. Contactez Wave directement\n' +
-      '   📧 Email: developers@wave.com\n' +
-      '   📱 WhatsApp: +221 77 xxx xx xx\n\n' +
-      '2. Présentez votre projet tontine\n' +
-      '3. Négociez les conditions\n' +
-      '4. Obtenez l\'accès API\n' +
-      '5. Intégrez et testez\n\n' +
-      '💡 Avantage: Wave est généralement plus ouvert aux fintechs locales\n' +
-      '💰 Frais négociables selon le volume',
-      [
-        { text: 'Annuler' },
-        { text: 'Configurer', onPress: () => showWaveConfig() },
-        { text: 'Contacter Wave', onPress: () => Linking.openURL('mailto:developers@wave.com') }
-      ]
-    );
-  };
-
-  const showWaveConfig = () => {
-    Alert.prompt(
-      'Configuration Wave',
-      'Entrez votre API Key Wave:',
-      [
-        { text: 'Annuler' },
-        { 
-          text: 'Suivant', 
-          onPress: (apiKey) => {
-            if (apiKey) {
-              Alert.prompt(
-                'Configuration Wave',
-                'Entrez votre Secret Key:',
-                [
-                  { text: 'Annuler' },
-                  { 
-                    text: 'Configurer', 
-                    onPress: async (secretKey) => {
-                      if (secretKey) {
-                        try {
-                          await productionService.configureWave({
-                            apiKey,
-                            secretKey,
-                            sandboxMode: !productionService.isProduction(),
-                          });
-                          updateStepStatus('wave-api', 'completed');
-                          Alert.alert('Succès', 'Wave configuré!');
-                        } catch (error) {
-                          Alert.alert('Erreur', 'Configuration échouée');
-                        }
-                      }
-                    }
-                  }
-                ]
-              );
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const showPaymentSecurityGuide = () => {
     Alert.alert(
       'Sécurité des Paiements',
@@ -538,56 +588,6 @@ export default function ProductionGuideScreen() {
       '• Réglementations locales BCEAO',
       [{ text: 'Compris' }]
     );
-  };
-
-  const showFirebaseGuide = () => {
-    Alert.alert(
-      'Configuration Firebase',
-      '🔥 Firebase Cloud Messaging:\n\n' +
-      '📋 Étapes de configuration:\n' +
-      '1. Créez un projet Firebase\n' +
-      '2. Ajoutez vos apps iOS/Android\n' +
-      '3. Téléchargez google-services.json\n' +
-      '4. Configurez les certificats push iOS\n' +
-      '5. Testez les notifications\n\n' +
-      '🔄 Alternative recommandée:\n' +
-      'Utilisez Expo Push Notifications (plus simple)\n\n' +
-      '💡 Expo Push est déjà intégré dans l\'app!',
-      [
-        { text: 'Annuler' },
-        { text: 'Utiliser Expo Push', onPress: () => testNotifications() },
-        { text: 'Firebase Console', onPress: () => Linking.openURL('https://console.firebase.google.com') }
-      ]
-    );
-  };
-
-  const testNotifications = async () => {
-    try {
-      updateStepStatus('expo-notifications', 'in-progress');
-      
-      const result = await notificationService.initialize();
-      if (result.success) {
-        await notificationService.scheduleLocalNotification({
-          title: '🎉 Test de notification',
-          body: 'Les notifications fonctionnent parfaitement!',
-          trigger: { seconds: 2 }
-        });
-        
-        // Configure notifications in production service
-        await productionService.configureNotifications({
-          firebaseProjectId: 'tontine-app-ci',
-        });
-        
-        updateStepStatus('expo-notifications', 'completed');
-        Alert.alert('✅ Succès', 'Notification de test programmée!\nLes notifications push sont configurées.');
-      } else {
-        updateStepStatus('expo-notifications', 'error');
-        Alert.alert('❌ Erreur', result.error || 'Échec du test de notification');
-      }
-    } catch (error) {
-      updateStepStatus('expo-notifications', 'error');
-      Alert.alert('❌ Erreur', 'Échec du test de notification');
-    }
   };
 
   const showAppStoreAssetsGuide = () => {

@@ -126,6 +126,174 @@ export default function DeploymentStatusScreen() {
   const [checks, setChecks] = useState<DeploymentCheck[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const performHealthChecks = useCallback(async (checkList: DeploymentCheck[]) => {
+    console.log('Performing health checks...');
+    
+    // Test API connection
+    try {
+      const response = await apiService.get('/health');
+      updateCheckStatus('api-connection', response ? 'success' : 'error');
+    } catch (error) {
+      console.log('API health check failed:', error);
+      updateCheckStatus('api-connection', 'error');
+    }
+
+    // Check production config
+    const config = await productionService.getConfig();
+    
+    // Check payment providers
+    updateCheckStatus('orange-money', config.orangeApiKey ? 'success' : 'warning');
+    updateCheckStatus('mtn-momo', config.mtnApiKey ? 'success' : 'warning');
+    updateCheckStatus('wave-payment', config.waveApiKey ? 'success' : 'warning');
+    
+    // Check notifications
+    updateCheckStatus('push-notifications', config.expoPushToken ? 'success' : 'warning');
+    
+    // Mock other checks (would be real in production)
+    updateCheckStatus('database-status', 'success');
+    updateCheckStatus('ssl-certificate', 'success');
+    updateCheckStatus('app-icons', 'warning');
+    updateCheckStatus('app-screenshots', 'warning');
+    updateCheckStatus('ios-build', 'pending');
+    updateCheckStatus('android-build', 'pending');
+    updateCheckStatus('privacy-policy', 'warning');
+    updateCheckStatus('terms-of-service', 'warning');
+  }, []);
+
+  const updateCheckStatus = useCallback((checkId: string, status: DeploymentCheck['status']) => {
+    setChecks(prev => prev.map(check => 
+      check.id === checkId ? { ...check, status } : check
+    ));
+  }, []);
+
+  const testApiConnection = useCallback(async () => {
+    console.log('Testing API connection...');
+    Alert.alert(
+      'Test de Connexion API',
+      'Voulez-vous tester la connexion au serveur de production ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { 
+          text: 'Tester', 
+          onPress: async () => {
+            try {
+              updateCheckStatus('api-connection', 'pending');
+              const response = await apiService.get('/health');
+              updateCheckStatus('api-connection', 'success');
+              Alert.alert('Succès', 'Connexion API réussie !');
+            } catch (error) {
+              updateCheckStatus('api-connection', 'error');
+              Alert.alert('Erreur', 'Impossible de se connecter à l\'API');
+            }
+          }
+        }
+      ]
+    );
+  }, [updateCheckStatus]);
+
+  const testNotifications = useCallback(async () => {
+    console.log('Testing push notifications...');
+    Alert.alert(
+      'Test Notifications',
+      'Cette fonctionnalité testera l\'envoi de notifications push.',
+      [
+        { text: 'OK' }
+      ]
+    );
+  }, []);
+
+  const showOrangeSetup = useCallback(() => {
+    Alert.alert(
+      'Configuration Orange Money',
+      'Pour configurer Orange Money :\n\n1. Contactez api-support@orange.ci\n2. Présentez votre projet tontine\n3. Obtenez vos clés API\n4. Configurez dans les paramètres',
+      [
+        { text: 'Fermer' },
+        { text: 'Ouvrir Guide', onPress: () => router.push('/production-guide') }
+      ]
+    );
+  }, []);
+
+  const showMtnSetup = useCallback(() => {
+    Alert.alert(
+      'Configuration MTN MoMo',
+      'Pour configurer MTN Mobile Money :\n\n1. Inscrivez-vous sur momodeveloper.mtn.com\n2. Souscrivez à l\'API Collections\n3. Testez en sandbox\n4. Demandez l\'accès production',
+      [
+        { text: 'Fermer' },
+        { text: 'Site MTN', onPress: () => Linking.openURL('https://momodeveloper.mtn.com') }
+      ]
+    );
+  }, []);
+
+  const showWaveSetup = useCallback(() => {
+    Alert.alert(
+      'Configuration Wave',
+      'Pour configurer Wave :\n\n1. Contactez developers@wave.com\n2. Présentez votre projet\n3. Négociez les conditions\n4. Intégrez l\'API',
+      [
+        { text: 'Fermer' }
+      ]
+    );
+  }, []);
+
+  const showIconGuide = useCallback(() => {
+    Alert.alert(
+      'Icônes Application',
+      'Icônes requises :\n\n• Icône principale : 1024x1024px\n• Icône adaptive Android\n• Icône notification : 256x256px\n• Favicon web : 32x32px',
+      [
+        { text: 'OK' }
+      ]
+    );
+  }, []);
+
+  const showScreenshotGuide = useCallback(() => {
+    Alert.alert(
+      'Captures d\'écran',
+      'Screenshots requis :\n\n• iPhone 6.7" : 1290x2796px\n• iPhone 6.5" : 1242x2688px\n• Android : 1080x1920px\n• Minimum 3 captures par plateforme',
+      [
+        { text: 'OK' }
+      ]
+    );
+  }, []);
+
+  const showIOSBuildGuide = useCallback(() => {
+    Alert.alert(
+      'Build iOS',
+      'Pour créer le build iOS :\n\n1. Configurez votre Apple Developer Account\n2. Exécutez : eas build --platform ios --profile production\n3. Soumettez via : eas submit --platform ios',
+      [
+        { text: 'OK' }
+      ]
+    );
+  }, []);
+
+  const showAndroidBuildGuide = useCallback(() => {
+    Alert.alert(
+      'Build Android',
+      'Pour créer le build Android :\n\n1. Configurez votre Google Play Console\n2. Exécutez : eas build --platform android --profile production\n3. Soumettez via : eas submit --platform android',
+      [
+        { text: 'OK' }
+      ]
+    );
+  }, []);
+
+  const showPrivacyPolicyGuide = useCallback(() => {
+    Alert.alert(
+      'Politique de Confidentialité',
+      'Votre politique doit couvrir :\n\n• Collecte des données personnelles\n• Utilisation des données de paiement\n• Partage avec fournisseurs Mobile Money\n• Droits des utilisateurs (RGPD)',
+      [
+        { text: 'OK' }
+      ]
+    );
+  }, []);
+
+  const showTermsGuide = useCallback(() => {
+    Alert.alert(
+      'Conditions d\'Utilisation',
+      'Vos CGU doivent inclure :\n\n• Règles d\'utilisation\n• Responsabilités des utilisateurs\n• Gestion des litiges\n• Frais et commissions\n• Résiliation de compte',
+      [
+        { text: 'OK' }
+      ]
+    );
+  }, []);
+
   const initializeChecks = useCallback(async () => {
     console.log('Initializing deployment checks...');
     setLoading(true);
@@ -247,179 +415,11 @@ export default function DeploymentStatusScreen() {
     setChecks(deploymentChecks);
     await performHealthChecks(deploymentChecks);
     setLoading(false);
-  }, []);
+  }, [performHealthChecks, testApiConnection, testNotifications, showOrangeSetup, showMtnSetup, showWaveSetup, showIconGuide, showScreenshotGuide, showIOSBuildGuide, showAndroidBuildGuide, showPrivacyPolicyGuide, showTermsGuide]);
 
   useEffect(() => {
     initializeChecks();
   }, [initializeChecks]);
-
-  const performHealthChecks = async (checkList: DeploymentCheck[]) => {
-    console.log('Performing health checks...');
-    
-    // Test API connection
-    try {
-      const response = await apiService.get('/health');
-      updateCheckStatus('api-connection', response ? 'success' : 'error');
-    } catch (error) {
-      console.log('API health check failed:', error);
-      updateCheckStatus('api-connection', 'error');
-    }
-
-    // Check production config
-    const config = await productionService.getConfig();
-    
-    // Check payment providers
-    updateCheckStatus('orange-money', config.orangeApiKey ? 'success' : 'warning');
-    updateCheckStatus('mtn-momo', config.mtnApiKey ? 'success' : 'warning');
-    updateCheckStatus('wave-payment', config.waveApiKey ? 'success' : 'warning');
-    
-    // Check notifications
-    updateCheckStatus('push-notifications', config.expoPushToken ? 'success' : 'warning');
-    
-    // Mock other checks (would be real in production)
-    updateCheckStatus('database-status', 'success');
-    updateCheckStatus('ssl-certificate', 'success');
-    updateCheckStatus('app-icons', 'warning');
-    updateCheckStatus('app-screenshots', 'warning');
-    updateCheckStatus('ios-build', 'pending');
-    updateCheckStatus('android-build', 'pending');
-    updateCheckStatus('privacy-policy', 'warning');
-    updateCheckStatus('terms-of-service', 'warning');
-  };
-
-  const updateCheckStatus = (checkId: string, status: DeploymentCheck['status']) => {
-    setChecks(prev => prev.map(check => 
-      check.id === checkId ? { ...check, status } : check
-    ));
-  };
-
-  const testApiConnection = async () => {
-    console.log('Testing API connection...');
-    Alert.alert(
-      'Test de Connexion API',
-      'Voulez-vous tester la connexion au serveur de production ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { 
-          text: 'Tester', 
-          onPress: async () => {
-            try {
-              updateCheckStatus('api-connection', 'pending');
-              const response = await apiService.get('/health');
-              updateCheckStatus('api-connection', 'success');
-              Alert.alert('Succès', 'Connexion API réussie !');
-            } catch (error) {
-              updateCheckStatus('api-connection', 'error');
-              Alert.alert('Erreur', 'Impossible de se connecter à l\'API');
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const testNotifications = async () => {
-    console.log('Testing push notifications...');
-    Alert.alert(
-      'Test Notifications',
-      'Cette fonctionnalité testera l\'envoi de notifications push.',
-      [
-        { text: 'OK' }
-      ]
-    );
-  };
-
-  const showOrangeSetup = () => {
-    Alert.alert(
-      'Configuration Orange Money',
-      'Pour configurer Orange Money :\n\n1. Contactez api-support@orange.ci\n2. Présentez votre projet tontine\n3. Obtenez vos clés API\n4. Configurez dans les paramètres',
-      [
-        { text: 'Fermer' },
-        { text: 'Ouvrir Guide', onPress: () => router.push('/production-guide') }
-      ]
-    );
-  };
-
-  const showMtnSetup = () => {
-    Alert.alert(
-      'Configuration MTN MoMo',
-      'Pour configurer MTN Mobile Money :\n\n1. Inscrivez-vous sur momodeveloper.mtn.com\n2. Souscrivez à l\'API Collections\n3. Testez en sandbox\n4. Demandez l\'accès production',
-      [
-        { text: 'Fermer' },
-        { text: 'Site MTN', onPress: () => Linking.openURL('https://momodeveloper.mtn.com') }
-      ]
-    );
-  };
-
-  const showWaveSetup = () => {
-    Alert.alert(
-      'Configuration Wave',
-      'Pour configurer Wave :\n\n1. Contactez developers@wave.com\n2. Présentez votre projet\n3. Négociez les conditions\n4. Intégrez l\'API',
-      [
-        { text: 'Fermer' }
-      ]
-    );
-  };
-
-  const showIconGuide = () => {
-    Alert.alert(
-      'Icônes Application',
-      'Icônes requises :\n\n• Icône principale : 1024x1024px\n• Icône adaptive Android\n• Icône notification : 256x256px\n• Favicon web : 32x32px',
-      [
-        { text: 'OK' }
-      ]
-    );
-  };
-
-  const showScreenshotGuide = () => {
-    Alert.alert(
-      'Captures d\'écran',
-      'Screenshots requis :\n\n• iPhone 6.7" : 1290x2796px\n• iPhone 6.5" : 1242x2688px\n• Android : 1080x1920px\n• Minimum 3 captures par plateforme',
-      [
-        { text: 'OK' }
-      ]
-    );
-  };
-
-  const showIOSBuildGuide = () => {
-    Alert.alert(
-      'Build iOS',
-      'Pour créer le build iOS :\n\n1. Configurez votre Apple Developer Account\n2. Exécutez : eas build --platform ios --profile production\n3. Soumettez via : eas submit --platform ios',
-      [
-        { text: 'OK' }
-      ]
-    );
-  };
-
-  const showAndroidBuildGuide = () => {
-    Alert.alert(
-      'Build Android',
-      'Pour créer le build Android :\n\n1. Configurez votre Google Play Console\n2. Exécutez : eas build --platform android --profile production\n3. Soumettez via : eas submit --platform android',
-      [
-        { text: 'OK' }
-      ]
-    );
-  };
-
-  const showPrivacyPolicyGuide = () => {
-    Alert.alert(
-      'Politique de Confidentialité',
-      'Votre politique doit couvrir :\n\n• Collecte des données personnelles\n• Utilisation des données de paiement\n• Partage avec fournisseurs Mobile Money\n• Droits des utilisateurs (RGPD)',
-      [
-        { text: 'OK' }
-      ]
-    );
-  };
-
-  const showTermsGuide = () => {
-    Alert.alert(
-      'Conditions d\'Utilisation',
-      'Vos CGU doivent inclure :\n\n• Règles d\'utilisation\n• Responsabilités des utilisateurs\n• Gestion des litiges\n• Frais et commissions\n• Résiliation de compte',
-      [
-        { text: 'OK' }
-      ]
-    );
-  };
 
   const getStatusColor = (status: DeploymentCheck['status']) => {
     switch (status) {

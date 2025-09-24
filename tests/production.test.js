@@ -6,10 +6,13 @@
  * en testant les intégrations critiques et les configurations.
  */
 
+import { describe, test, expect, beforeAll } from '@jest/globals';
+
 const { productionService } = require('../services/productionService');
 const { apiService } = require('../services/apiService');
 const { paymentService } = require('../services/paymentService');
 const { notificationService } = require('../services/notificationService');
+const { storageService } = require('../services/storageService');
 
 describe('Production Readiness Tests', () => {
   

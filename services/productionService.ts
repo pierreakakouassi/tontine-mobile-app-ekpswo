@@ -407,11 +407,11 @@ class ProductionService {
   // Health Check
   async performHealthCheck(): Promise<{
     status: 'healthy' | 'warning' | 'error';
-    checks: Array<{
+    checks: {
       name: string;
       status: 'pass' | 'fail' | 'warn';
       message: string;
-    }>;
+    }[];
   }> {
     const checks = [];
     let overallStatus: 'healthy' | 'warning' | 'error' = 'healthy';
@@ -572,13 +572,13 @@ class ProductionService {
   }
 
   // Get deployment checklist
-  getDeploymentChecklist(): Array<{
+  getDeploymentChecklist(): {
     id: string;
     title: string;
     description: string;
     completed: boolean;
     critical: boolean;
-  }> {
+  }[] {
     return [
       {
         id: 'api-url',

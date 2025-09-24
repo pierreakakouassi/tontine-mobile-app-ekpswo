@@ -397,7 +397,7 @@ class ApiService {
     });
   }
 
-  async getPaymentMethods(): Promise<ApiResponse<Array<{ id: string; name: string; enabled: boolean }>>> {
+  async getPaymentMethods(): Promise<ApiResponse<{ id: string; name: string; enabled: boolean }[]>> {
     return this.makeRequest('/payments/methods');
   }
 

@@ -1,6 +1,5 @@
 
 #!/usr/bin/env node
-
 /**
  * Script de déploiement automatisé pour Tontine CI
  * 

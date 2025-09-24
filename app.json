@@ -50,7 +50,6 @@
       "expo-router",
       "expo-web-browser",
       "expo-notifications",
-      "expo-sms",
       "expo-image-picker",
       "expo-secure-store"
     ],

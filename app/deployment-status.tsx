@@ -415,7 +415,7 @@ export default function DeploymentStatusScreen() {
     setChecks(deploymentChecks);
     await performHealthChecks(deploymentChecks);
     setLoading(false);
-  }, [performHealthChecks, testApiConnection, testNotifications, showOrangeSetup, showMtnSetup, showWaveSetup, showIconGuide, showScreenshotGuide, showIOSBuildGuide, showAndroidBuildGuide, showPrivacyPolicyGuide, showTermsGuide]);
+  }, []);
 
   useEffect(() => {
     initializeChecks();

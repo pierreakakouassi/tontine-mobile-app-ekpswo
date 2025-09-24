@@ -323,26 +323,7 @@ export default function ProductionGuideScreen() {
     }
   }, [updateStepStatus]);
 
-  const showFirebaseGuide = useCallback(() => {
-    Alert.alert(
-      'Configuration Firebase',
-      '🔥 Firebase Cloud Messaging:\n\n' +
-      '📋 Étapes de configuration:\n' +
-      '1. Créez un projet Firebase\n' +
-      '2. Ajoutez vos apps iOS/Android\n' +
-      '3. Téléchargez google-services.json\n' +
-      '4. Configurez les certificats push iOS\n' +
-      '5. Testez les notifications\n\n' +
-      '🔄 Alternative recommandée:\n' +
-      'Utilisez Expo Push Notifications (plus simple)\n\n' +
-      '💡 Expo Push est déjà intégré dans l\'app!',
-      [
-        { text: 'Annuler' },
-        { text: 'Utiliser Expo Push', onPress: () => testNotifications() },
-        { text: 'Firebase Console', onPress: () => Linking.openURL('https://console.firebase.google.com') }
-      ]
-    );
-  }, [testNotifications]);
+
 
   const initializeSteps = useCallback(() => {
     const productionSteps: ProductionStep[] = [
@@ -493,7 +474,7 @@ export default function ProductionGuideScreen() {
     ];
 
     setSteps(productionSteps);
-  }, [showBackendGuide, showDatabaseGuide, showOrangeApiGuide, showMtnApiGuide, showWaveApiGuide, showFirebaseGuide, testNotifications, showPaymentSecurityGuide, showAppStoreAssetsGuide, showIosSubmissionGuide, showAndroidSubmissionGuide, showUserTestingGuide, showPaymentTestingGuide, showSecurityAuditGuide]);
+  }, []);
 
   const checkCurrentStatus = useCallback(async () => {
     try {

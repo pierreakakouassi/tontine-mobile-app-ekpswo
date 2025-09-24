@@ -1,7 +1,22 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { User, Tontine, Payment, Notification, CreateTontineData } from '../types';
+import { 
+  User, 
+  Circle, 
+  CircleMember, 
+  Cycle, 
+  Payment, 
+  Payout, 
+  Penalty, 
+  Invite, 
+  Event, 
+  Notification,
+  CreateCircleForm,
+  JoinCircleForm,
+  PaymentForm,
+  ApiResponse
+} from '../types';
 
 // API Configuration - will be updated by productionService
 let API_BASE_URL = __DEV__ 
@@ -9,13 +24,6 @@ let API_BASE_URL = __DEV__
   : 'https://your-production-api.com/api';
 
 const API_TIMEOUT = 15000; // 15 seconds for production
-
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
 
 class ApiService {
   private authToken: string | null = null;
@@ -200,24 +208,24 @@ class ApiService {
     }
   }
 
-  // Authentication
-  async login(phoneNumber: string): Promise<ApiResponse<{ otpSent: boolean; expiresIn: number }>> {
-    return this.makeRequest('/auth/login', {
+  // Authentication - OTP based
+  async sendOtp(phone: string): Promise<ApiResponse<{ otp_sent: boolean; expires_in: number }>> {
+    return this.makeRequest('/auth/send-otp', {
       method: 'POST',
-      body: JSON.stringify({ phoneNumber }),
+      body: JSON.stringify({ phone }),
     });
   }
 
-  async verifyOtp(phoneNumber: string, otp: string): Promise<ApiResponse<{ user: User; token: string; refreshToken: string }>> {
-    const response = await this.makeRequest<{ user: User; token: string; refreshToken: string }>('/auth/verify-otp', {
+  async verifyOtp(phone: string, otp: string): Promise<ApiResponse<{ user: User; token: string; refresh_token: string }>> {
+    const response = await this.makeRequest<{ user: User; token: string; refresh_token: string }>('/auth/verify-otp', {
       method: 'POST',
-      body: JSON.stringify({ phoneNumber, otp }),
+      body: JSON.stringify({ phone, otp }),
     });
 
     if (response.success && response.data) {
       this.authToken = response.data.token;
       await SecureStore.setItemAsync('auth_token', response.data.token);
-      await SecureStore.setItemAsync('refresh_token', response.data.refreshToken);
+      await SecureStore.setItemAsync('refresh_token', response.data.refresh_token);
       await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
       console.log('✅ User authenticated and stored');
     }
@@ -225,14 +233,14 @@ class ApiService {
     return response;
   }
 
-  async refreshToken(): Promise<ApiResponse<{ token: string; refreshToken: string }>> {
+  async refreshToken(): Promise<ApiResponse<{ token: string; refresh_token: string }>> {
     try {
       const refreshToken = await SecureStore.getItemAsync('refresh_token');
       if (!refreshToken) {
         throw new Error('No refresh token available');
       }
 
-      const response = await this.makeRequest<{ token: string; refreshToken: string }>('/auth/refresh', {
+      const response = await this.makeRequest<{ token: string; refresh_token: string }>('/auth/refresh', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${refreshToken}`,
@@ -242,7 +250,7 @@ class ApiService {
       if (response.success && response.data) {
         this.authToken = response.data.token;
         await SecureStore.setItemAsync('auth_token', response.data.token);
-        await SecureStore.setItemAsync('refresh_token', response.data.refreshToken);
+        await SecureStore.setItemAsync('refresh_token', response.data.refresh_token);
         console.log('✅ Token refreshed successfully');
       }
 
@@ -275,31 +283,25 @@ class ApiService {
 
   // User Management
   async getCurrentUser(): Promise<ApiResponse<User>> {
-    return this.makeRequest('/user/profile');
+    return this.makeRequest('/users/profile');
   }
 
   async updateProfile(userData: Partial<User>): Promise<ApiResponse<User>> {
-    return this.makeRequest('/user/profile', {
+    return this.makeRequest('/users/profile', {
       method: 'PUT',
       body: JSON.stringify(userData),
     });
   }
 
-  async deleteAccount(): Promise<ApiResponse<void>> {
-    return this.makeRequest('/user/account', {
-      method: 'DELETE',
-    });
-  }
-
-  async uploadProfilePicture(imageUri: string): Promise<ApiResponse<{ imageUrl: string }>> {
+  async uploadAvatar(imageUri: string): Promise<ApiResponse<{ avatar_url: string }>> {
     const formData = new FormData();
-    formData.append('profile_picture', {
+    formData.append('avatar', {
       uri: imageUri,
       type: 'image/jpeg',
-      name: 'profile.jpg',
+      name: 'avatar.jpg',
     } as any);
 
-    return this.makeRequest('/user/profile-picture', {
+    return this.makeRequest('/users/avatar', {
       method: 'POST',
       body: formData,
       headers: {
@@ -308,97 +310,169 @@ class ApiService {
     });
   }
 
-  // Tontine Management
-  async getUserTontines(): Promise<ApiResponse<Tontine[]>> {
-    return this.makeRequest('/tontines');
+  // Circle Management
+  async getUserCircles(): Promise<ApiResponse<Circle[]>> {
+    return this.makeRequest('/circles');
   }
 
-  async getTontineById(id: string): Promise<ApiResponse<Tontine>> {
-    return this.makeRequest(`/tontines/${id}`);
+  async getCircleById(id: string): Promise<ApiResponse<Circle & { members: (CircleMember & { user: User })[] }>> {
+    return this.makeRequest(`/circles/${id}`);
   }
 
-  async createTontine(tontineData: CreateTontineData): Promise<ApiResponse<Tontine>> {
-    return this.makeRequest('/tontines', {
+  async createCircle(circleData: CreateCircleForm): Promise<ApiResponse<Circle>> {
+    return this.makeRequest('/circles', {
       method: 'POST',
-      body: JSON.stringify(tontineData),
+      body: JSON.stringify(circleData),
     });
   }
 
-  async updateTontine(id: string, updates: Partial<Tontine>): Promise<ApiResponse<Tontine>> {
-    return this.makeRequest(`/tontines/${id}`, {
+  async updateCircle(id: string, updates: Partial<Circle>): Promise<ApiResponse<Circle>> {
+    return this.makeRequest(`/circles/${id}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
     });
   }
 
-  async deleteTontine(id: string): Promise<ApiResponse<void>> {
-    return this.makeRequest(`/tontines/${id}`, {
+  async deleteCircle(id: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/circles/${id}`, {
       method: 'DELETE',
     });
   }
 
-  async joinTontine(tontineId: string, inviteCode?: string): Promise<ApiResponse<Tontine>> {
-    return this.makeRequest(`/tontines/${tontineId}/join`, {
+  async joinCircle(circleId: string, inviteCode: string): Promise<ApiResponse<CircleMember>> {
+    return this.makeRequest(`/circles/${circleId}/join`, {
       method: 'POST',
-      body: JSON.stringify({ inviteCode }),
+      body: JSON.stringify({ invite_code: inviteCode }),
     });
   }
 
-  async leaveTontine(tontineId: string): Promise<ApiResponse<void>> {
-    return this.makeRequest(`/tontines/${tontineId}/leave`, {
+  async leaveCircle(circleId: string): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/circles/${circleId}/leave`, {
       method: 'POST',
     });
   }
 
-  async inviteToTontine(tontineId: string, phoneNumbers: string[]): Promise<ApiResponse<{ invitesSent: number }>> {
-    return this.makeRequest(`/tontines/${tontineId}/invite`, {
-      method: 'POST',
-      body: JSON.stringify({ phoneNumbers }),
+  async getCircleMembers(circleId: string): Promise<ApiResponse<(CircleMember & { user: User })[]>> {
+    return this.makeRequest(`/circles/${circleId}/members`);
+  }
+
+  async updateMemberOrder(circleId: string, memberOrders: { member_id: string; order_index: number }[]): Promise<ApiResponse<void>> {
+    return this.makeRequest(`/circles/${circleId}/member-order`, {
+      method: 'PUT',
+      body: JSON.stringify({ member_orders: memberOrders }),
     });
   }
 
-  async getTontineMembers(tontineId: string): Promise<ApiResponse<User[]>> {
-    return this.makeRequest(`/tontines/${tontineId}/members`);
+  // Invitation Management
+  async createInvite(circleId: string, channel: 'LINK' | 'WHATSAPP' | 'SMS'): Promise<ApiResponse<Invite>> {
+    return this.makeRequest(`/circles/${circleId}/invites`, {
+      method: 'POST',
+      body: JSON.stringify({ channel }),
+    });
   }
 
-  async generateInviteLink(tontineId: string): Promise<ApiResponse<{ inviteLink: string; inviteCode: string }>> {
-    return this.makeRequest(`/tontines/${tontineId}/invite-link`, {
+  async getCircleInvites(circleId: string): Promise<ApiResponse<Invite[]>> {
+    return this.makeRequest(`/circles/${circleId}/invites`);
+  }
+
+  async sendWhatsAppInvite(circleId: string, phoneNumbers: string[]): Promise<ApiResponse<{ invites_sent: number }>> {
+    return this.makeRequest(`/circles/${circleId}/invite-whatsapp`, {
+      method: 'POST',
+      body: JSON.stringify({ phone_numbers: phoneNumbers }),
+    });
+  }
+
+  async sendSmsInvite(circleId: string, phoneNumbers: string[]): Promise<ApiResponse<{ invites_sent: number }>> {
+    return this.makeRequest(`/circles/${circleId}/invite-sms`, {
+      method: 'POST',
+      body: JSON.stringify({ phone_numbers: phoneNumbers }),
+    });
+  }
+
+  // Cycle Management
+  async getCircleCycles(circleId: string): Promise<ApiResponse<Cycle[]>> {
+    return this.makeRequest(`/circles/${circleId}/cycles`);
+  }
+
+  async getCurrentCycle(circleId: string): Promise<ApiResponse<Cycle>> {
+    return this.makeRequest(`/circles/${circleId}/current-cycle`);
+  }
+
+  async startNextCycle(circleId: string): Promise<ApiResponse<Cycle>> {
+    return this.makeRequest(`/circles/${circleId}/start-cycle`, {
       method: 'POST',
     });
   }
 
   // Payment Management
-  async initiatePayment(tontineId: string, paymentMethod: 'orange' | 'mtn' | 'wave'): Promise<ApiResponse<{ paymentUrl: string; transactionId: string }>> {
+  async initiatePayment(paymentData: PaymentForm): Promise<ApiResponse<{ payment_url: string; tx_ref: string }>> {
     return this.makeRequest('/payments/initiate', {
       method: 'POST',
-      body: JSON.stringify({ tontineId, paymentMethod }),
+      body: JSON.stringify(paymentData),
     });
   }
 
-  async verifyPayment(transactionId: string): Promise<ApiResponse<Payment>> {
-    return this.makeRequest(`/payments/verify/${transactionId}`);
+  async verifyPayment(txRef: string): Promise<ApiResponse<Payment>> {
+    return this.makeRequest(`/payments/verify/${txRef}`);
   }
 
-  async getPaymentHistory(tontineId?: string): Promise<ApiResponse<Payment[]>> {
-    const endpoint = tontineId ? `/payments?tontineId=${tontineId}` : '/payments';
+  async getCirclePayments(circleId: string, cycleId?: string): Promise<ApiResponse<Payment[]>> {
+    const endpoint = cycleId 
+      ? `/circles/${circleId}/payments?cycle_id=${cycleId}`
+      : `/circles/${circleId}/payments`;
     return this.makeRequest(endpoint);
   }
 
-  async cancelPayment(transactionId: string): Promise<ApiResponse<void>> {
-    return this.makeRequest(`/payments/${transactionId}/cancel`, {
+  async getUserPayments(): Promise<ApiResponse<Payment[]>> {
+    return this.makeRequest('/payments/my-payments');
+  }
+
+  async recordCashPayment(circleId: string, cycleId: string, memberId: string, amount: number): Promise<ApiResponse<Payment>> {
+    return this.makeRequest('/payments/cash', {
       method: 'POST',
+      body: JSON.stringify({
+        circle_id: circleId,
+        cycle_id: cycleId,
+        member_id: memberId,
+        amount,
+      }),
     });
   }
 
-  async refundPayment(transactionId: string, reason: string): Promise<ApiResponse<void>> {
-    return this.makeRequest(`/payments/${transactionId}/refund`, {
+  // Payout Management
+  async initiatePayout(circleId: string, cycleId: string, provider: 'ORANGE' | 'MTN' | 'WAVE'): Promise<ApiResponse<Payout>> {
+    return this.makeRequest('/payouts/initiate', {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({
+        circle_id: circleId,
+        cycle_id: cycleId,
+        provider,
+      }),
     });
   }
 
-  async getPaymentMethods(): Promise<ApiResponse<{ id: string; name: string; enabled: boolean }[]>> {
-    return this.makeRequest('/payments/methods');
+  async verifyPayout(txRef: string): Promise<ApiResponse<Payout>> {
+    return this.makeRequest(`/payouts/verify/${txRef}`);
+  }
+
+  async getCirclePayouts(circleId: string): Promise<ApiResponse<Payout[]>> {
+    return this.makeRequest(`/circles/${circleId}/payouts`);
+  }
+
+  // Penalty Management
+  async createPenalty(paymentId: string, amount: number, reason: string): Promise<ApiResponse<Penalty>> {
+    return this.makeRequest('/penalties', {
+      method: 'POST',
+      body: JSON.stringify({
+        payment_id: paymentId,
+        amount,
+        reason,
+      }),
+    });
+  }
+
+  async getCirclePenalties(circleId: string): Promise<ApiResponse<Penalty[]>> {
+    return this.makeRequest(`/circles/${circleId}/penalties`);
   }
 
   // Notifications
@@ -418,57 +492,50 @@ class ApiService {
     });
   }
 
-  async deleteNotification(notificationId: string): Promise<ApiResponse<void>> {
-    return this.makeRequest(`/notifications/${notificationId}`, {
-      method: 'DELETE',
-    });
+  // Events & Audit Log
+  async getCircleEvents(circleId: string): Promise<ApiResponse<Event[]>> {
+    return this.makeRequest(`/circles/${circleId}/events`);
+  }
+
+  // Analytics
+  async getCircleAnalytics(circleId: string): Promise<ApiResponse<{
+    total_collected: number;
+    total_paid_out: number;
+    completion_rate: number;
+    average_payment_time: number;
+    member_reliability_scores: { user_id: string; score: number }[];
+  }>> {
+    return this.makeRequest(`/circles/${circleId}/analytics`);
+  }
+
+  async getUserAnalytics(): Promise<ApiResponse<{
+    total_circles: number;
+    active_circles: number;
+    total_contributed: number;
+    total_received: number;
+    reliability_score: number;
+    payment_history: { on_time: number; late: number; missed: number };
+  }>> {
+    return this.makeRequest('/users/analytics');
   }
 
   // Push Notification Token
   async updatePushToken(token: string): Promise<ApiResponse<void>> {
-    return this.makeRequest('/user/push-token', {
+    return this.makeRequest('/users/push-token', {
       method: 'PUT',
-      body: JSON.stringify({ pushToken: token }),
+      body: JSON.stringify({ push_token: token }),
     });
   }
 
-  // Analytics and Reporting
-  async getTontineAnalytics(tontineId: string): Promise<ApiResponse<any>> {
-    return this.makeRequest(`/tontines/${tontineId}/analytics`);
-  }
-
-  async getUserAnalytics(): Promise<ApiResponse<any>> {
-    return this.makeRequest('/user/analytics');
-  }
-
-  async getSystemAnalytics(): Promise<ApiResponse<any>> {
-    return this.makeRequest('/analytics/system');
-  }
-
-  // Admin endpoints (if user has admin role)
-  async getSystemStats(): Promise<ApiResponse<any>> {
-    return this.makeRequest('/admin/stats');
-  }
-
-  async getAllUsers(page = 1, limit = 50): Promise<ApiResponse<{ users: User[]; total: number; page: number }>> {
-    return this.makeRequest(`/admin/users?page=${page}&limit=${limit}`);
-  }
-
-  async getAllTontines(page = 1, limit = 50): Promise<ApiResponse<{ tontines: Tontine[]; total: number; page: number }>> {
-    return this.makeRequest(`/admin/tontines?page=${page}&limit=${limit}`);
-  }
-
-  async suspendUser(userId: string, reason: string): Promise<ApiResponse<void>> {
-    return this.makeRequest(`/admin/users/${userId}/suspend`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-  }
-
-  async unsuspendUser(userId: string): Promise<ApiResponse<void>> {
-    return this.makeRequest(`/admin/users/${userId}/unsuspend`, {
-      method: 'POST',
-    });
+  // Payment Methods
+  async getAvailablePaymentMethods(): Promise<ApiResponse<{
+    id: string;
+    name: string;
+    provider: 'ORANGE' | 'MTN' | 'WAVE';
+    enabled: boolean;
+    fees: number;
+  }[]>> {
+    return this.makeRequest('/payments/methods');
   }
 
   // Utility methods

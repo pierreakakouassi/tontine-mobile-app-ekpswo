@@ -1,312 +1,333 @@
 
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import Icon from '../components/Icon';
-import { useAuth } from '../hooks/useAuth';
 import { commonStyles, colors } from '../styles/commonStyles';
+import { authService } from '../services/authService';
+import { useAuth } from '../hooks/useAuth';
+import Icon from '../components/Icon';
 
 export default function OnboardingScreen() {
-  const [currentStep, setCurrentStep] = useState(1);
+  const { isAuthenticated } = useAuth();
+  const [step, setStep] = useState<'phone' | 'otp' | 'profile'>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
-  const [language, setLanguage] = useState('fr');
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
-  const { sendOtp, verifyOtp } = useAuth();
+  const [otpTimer, setOtpTimer] = useState(0);
 
-  const handleNextStep = async () => {
-    if (currentStep === 1) {
-      if (!phoneNumber.trim()) {
-        Alert.alert('Erreur', 'Veuillez saisir votre numéro de téléphone');
-        return;
-      }
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace('/');
+    }
+  }, [isAuthenticated]);
 
-      setIsLoading(true);
-      console.log('Sending OTP to:', phoneNumber);
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (otpTimer > 0) {
+      interval = setInterval(() => {
+        setOtpTimer(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [otpTimer]);
+
+  const handleSendOtp = async () => {
+    if (!phoneNumber.trim()) {
+      Alert.alert('Erreur', 'Veuillez saisir votre numéro de téléphone');
+      return;
+    }
+
+    // Validate phone number
+    const validation = authService.validatePhoneNumber(phoneNumber);
+    if (!validation.isValid) {
+      Alert.alert('Erreur', validation.error);
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const result = await authService.sendOtp(validation.normalized!);
       
-      const result = await sendOtp(phoneNumber);
-      setIsLoading(false);
-
       if (result.success) {
-        setCurrentStep(2);
+        setStep('otp');
+        setOtpTimer(result.expiresIn || 300); // Default 5 minutes
+        setPhoneNumber(validation.normalized!);
         Alert.alert(
           'Code envoyé', 
-          'Un code de vérification a été envoyé à votre numéro de téléphone'
+          __DEV__ 
+            ? 'En mode développement, utilisez n\'importe quel code à 4 chiffres'
+            : `Un code de vérification a été envoyé au ${validation.normalized}`
         );
       } else {
         Alert.alert('Erreur', result.error || 'Impossible d\'envoyer le code');
       }
-    } else if (currentStep === 2) {
-      if (!otp.trim() || otp.length !== 4) {
-        Alert.alert('Erreur', 'Veuillez saisir le code à 4 chiffres');
-        return;
-      }
-
-      setIsLoading(true);
-      console.log('Verifying OTP:', otp);
-      
-      const result = await verifyOtp(phoneNumber, otp);
+    } catch (error) {
+      Alert.alert('Erreur', 'Une erreur est survenue');
+    } finally {
       setIsLoading(false);
+    }
+  };
 
+  const handleVerifyOtp = async () => {
+    if (!otp.trim()) {
+      Alert.alert('Erreur', 'Veuillez saisir le code de vérification');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const result = await authService.verifyOtp(phoneNumber, otp);
+      
       if (result.success) {
-        setCurrentStep(3);
+        if (result.user && !result.user.name) {
+          // User needs to complete profile
+          setStep('profile');
+        } else {
+          // User is fully registered, redirect to home
+          router.replace('/');
+        }
       } else {
-        Alert.alert('Erreur', result.error || 'Code de vérification incorrect');
+        Alert.alert('Erreur', result.error || 'Code de vérification invalide');
       }
-    } else if (currentStep === 3) {
-      if (!name.trim()) {
-        Alert.alert('Erreur', 'Veuillez saisir votre nom');
-        return;
-      }
-
-      if (!acceptedTerms) {
-        Alert.alert('Erreur', 'Veuillez accepter les conditions d\'utilisation');
-        return;
-      }
-
-      // Complete onboarding
-      console.log('Onboarding completed for:', { name, language, phoneNumber });
-      Alert.alert(
-        'Bienvenue !',
-        'Votre compte a été créé avec succès. Vous pouvez maintenant créer ou rejoindre une tontine.',
-        [
-          {
-            text: 'Commencer',
-            onPress: () => router.replace('/'),
-          },
-        ]
-      );
+    } catch (error) {
+      Alert.alert('Erreur', 'Une erreur est survenue');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handlePreviousStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
+  const handleCompleteProfile = async () => {
+    if (!name.trim()) {
+      Alert.alert('Erreur', 'Veuillez saisir votre nom');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const result = await authService.updateUser({ name: name.trim() });
+      
+      if (result.success) {
+        Alert.alert('Bienvenue!', 'Votre profil a été créé avec succès', [
+          { text: 'Continuer', onPress: () => router.replace('/') }
+        ]);
+      } else {
+        Alert.alert('Erreur', result.error || 'Impossible de créer le profil');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Une erreur est survenue');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const renderStep1 = () => (
-    <View style={commonStyles.container}>
-      <View style={commonStyles.header}>
-        <Text style={commonStyles.title}>Bienvenue !</Text>
-        <Text style={commonStyles.subtitle}>
-          Commençons par vérifier votre numéro de téléphone
-        </Text>
-      </View>
+  const handleResendOtp = async () => {
+    if (otpTimer > 0) return;
+    
+    setIsLoading(true);
+    try {
+      const result = await authService.sendOtp(phoneNumber);
+      if (result.success) {
+        setOtpTimer(result.expiresIn || 300);
+        Alert.alert('Code renvoyé', 'Un nouveau code a été envoyé');
+      } else {
+        Alert.alert('Erreur', result.error || 'Impossible de renvoyer le code');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Une erreur est survenue');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      <View style={commonStyles.content}>
-        <View style={commonStyles.inputContainer}>
-          <Text style={commonStyles.label}>Numéro de téléphone</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            placeholder="+225 XX XX XX XX XX"
-            keyboardType="phone-pad"
-            autoFocus
-          />
+  const formatTimer = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const renderPhoneStep = () => (
+    <View style={{ flex: 1, justifyContent: 'center' }}>
+      <View style={{ alignItems: 'center', marginBottom: 40 }}>
+        <View style={{
+          width: 80,
+          height: 80,
+          borderRadius: 40,
+          backgroundColor: colors.primary,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 20,
+        }}>
+          <Icon name="phone" size={40} color={colors.backgroundAlt} />
         </View>
-
-        <Text style={commonStyles.helperText}>
-          Nous utiliserons ce numéro pour vous identifier et vous envoyer des notifications importantes.
+        <Text style={[commonStyles.title, { textAlign: 'center', marginBottom: 8 }]}>
+          Bienvenue sur TontineApp
+        </Text>
+        <Text style={[commonStyles.textSecondary, { textAlign: 'center' }]}>
+          Saisissez votre numéro de téléphone pour commencer
         </Text>
       </View>
 
-      <View style={commonStyles.footer}>
-        <TouchableOpacity
-          style={[commonStyles.button, commonStyles.primaryButton]}
-          onPress={handleNextStep}
-          disabled={isLoading}
-        >
-          <Text style={commonStyles.buttonText}>
-            {isLoading ? 'Envoi...' : 'Continuer'}
-          </Text>
-        </TouchableOpacity>
+      <View style={commonStyles.section}>
+        <Text style={[commonStyles.text, { marginBottom: 8 }]}>Numéro de téléphone</Text>
+        <TextInput
+          style={commonStyles.input}
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          placeholder="+225 XX XX XX XX XX"
+          keyboardType="phone-pad"
+          autoFocus
+          maxLength={15}
+        />
+        <Text style={[commonStyles.textSecondary, { fontSize: 12, marginTop: 4 }]}>
+          Format: +225XXXXXXXX ou XXXXXXXX
+        </Text>
       </View>
+
+      <TouchableOpacity
+        style={[commonStyles.button, { opacity: isLoading ? 0.7 : 1 }]}
+        onPress={handleSendOtp}
+        disabled={isLoading}
+      >
+        <Text style={commonStyles.buttonText}>
+          {isLoading ? 'Envoi en cours...' : 'Envoyer le code'}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const renderStep2 = () => (
-    <View style={commonStyles.container}>
-      <TouchableOpacity
-        style={commonStyles.backButton}
-        onPress={handlePreviousStep}
-      >
-        <Icon name="arrow-left" size={24} color={colors.text} />
-      </TouchableOpacity>
-
-      <View style={commonStyles.header}>
-        <Text style={commonStyles.title}>Vérification</Text>
-        <Text style={commonStyles.subtitle}>
-          Saisissez le code à 4 chiffres envoyé au {phoneNumber}
+  const renderOtpStep = () => (
+    <View style={{ flex: 1, justifyContent: 'center' }}>
+      <View style={{ alignItems: 'center', marginBottom: 40 }}>
+        <View style={{
+          width: 80,
+          height: 80,
+          borderRadius: 40,
+          backgroundColor: colors.success,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 20,
+        }}>
+          <Icon name="mail" size={40} color={colors.backgroundAlt} />
+        </View>
+        <Text style={[commonStyles.title, { textAlign: 'center', marginBottom: 8 }]}>
+          Vérification
+        </Text>
+        <Text style={[commonStyles.textSecondary, { textAlign: 'center' }]}>
+          Saisissez le code envoyé au {phoneNumber}
         </Text>
       </View>
 
-      <View style={commonStyles.content}>
-        <View style={commonStyles.inputContainer}>
-          <Text style={commonStyles.label}>Code de vérification</Text>
-          <TextInput
-            style={[commonStyles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8 }]}
-            value={otp}
-            onChangeText={setOtp}
-            placeholder="0000"
-            keyboardType="numeric"
-            maxLength={4}
-            autoFocus
-          />
-        </View>
-
-        <TouchableOpacity
-          style={commonStyles.linkButton}
-          onPress={() => {
-            setCurrentStep(1);
-            setOtp('');
-          }}
-        >
-          <Text style={commonStyles.linkText}>
-            Modifier le numéro de téléphone
+      <View style={commonStyles.section}>
+        <Text style={[commonStyles.text, { marginBottom: 8 }]}>Code de vérification</Text>
+        <TextInput
+          style={[commonStyles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8 }]}
+          value={otp}
+          onChangeText={setOtp}
+          placeholder="0000"
+          keyboardType="number-pad"
+          autoFocus
+          maxLength={6}
+        />
+        {otpTimer > 0 && (
+          <Text style={[commonStyles.textSecondary, { fontSize: 12, marginTop: 4, textAlign: 'center' }]}>
+            Code expire dans {formatTimer(otpTimer)}
           </Text>
-        </TouchableOpacity>
+        )}
       </View>
 
-      <View style={commonStyles.footer}>
-        <TouchableOpacity
-          style={[commonStyles.button, commonStyles.primaryButton]}
-          onPress={handleNextStep}
-          disabled={isLoading}
-        >
-          <Text style={commonStyles.buttonText}>
-            {isLoading ? 'Vérification...' : 'Vérifier'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={[commonStyles.button, { opacity: isLoading ? 0.7 : 1 }]}
+        onPress={handleVerifyOtp}
+        disabled={isLoading}
+      >
+        <Text style={commonStyles.buttonText}>
+          {isLoading ? 'Vérification...' : 'Vérifier'}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[commonStyles.buttonSecondary, { marginTop: 12, opacity: otpTimer > 0 ? 0.5 : 1 }]}
+        onPress={handleResendOtp}
+        disabled={otpTimer > 0 || isLoading}
+      >
+        <Text style={commonStyles.buttonSecondaryText}>
+          {otpTimer > 0 ? `Renvoyer dans ${formatTimer(otpTimer)}` : 'Renvoyer le code'}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={{ marginTop: 20, alignItems: 'center' }}
+        onPress={() => setStep('phone')}
+      >
+        <Text style={[commonStyles.textSecondary, { textDecorationLine: 'underline' }]}>
+          Modifier le numéro
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const renderStep3 = () => (
-    <View style={commonStyles.container}>
+  const renderProfileStep = () => (
+    <View style={{ flex: 1, justifyContent: 'center' }}>
+      <View style={{ alignItems: 'center', marginBottom: 40 }}>
+        <View style={{
+          width: 80,
+          height: 80,
+          borderRadius: 40,
+          backgroundColor: colors.warning,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 20,
+        }}>
+          <Icon name="person" size={40} color={colors.backgroundAlt} />
+        </View>
+        <Text style={[commonStyles.title, { textAlign: 'center', marginBottom: 8 }]}>
+          Complétez votre profil
+        </Text>
+        <Text style={[commonStyles.textSecondary, { textAlign: 'center' }]}>
+          Comment souhaitez-vous être appelé(e) ?
+        </Text>
+      </View>
+
+      <View style={commonStyles.section}>
+        <Text style={[commonStyles.text, { marginBottom: 8 }]}>Nom complet</Text>
+        <TextInput
+          style={commonStyles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="Ex: Jean Kouassi"
+          autoFocus
+          autoCapitalize="words"
+          maxLength={50}
+        />
+      </View>
+
       <TouchableOpacity
-        style={commonStyles.backButton}
-        onPress={handlePreviousStep}
+        style={[commonStyles.button, { opacity: isLoading ? 0.7 : 1 }]}
+        onPress={handleCompleteProfile}
+        disabled={isLoading}
       >
-        <Icon name="arrow-left" size={24} color={colors.text} />
+        <Text style={commonStyles.buttonText}>
+          {isLoading ? 'Création...' : 'Créer mon profil'}
+        </Text>
       </TouchableOpacity>
-
-      <View style={commonStyles.header}>
-        <Text style={commonStyles.title}>Profil minimal</Text>
-        <Text style={commonStyles.subtitle}>
-          Quelques informations pour finaliser votre compte
-        </Text>
-      </View>
-
-      <View style={commonStyles.content}>
-        <View style={commonStyles.inputContainer}>
-          <Text style={commonStyles.label}>Votre nom *</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Ex: Jean Kouassi"
-            autoFocus
-          />
-        </View>
-
-        <View style={commonStyles.inputContainer}>
-          <Text style={commonStyles.label}>Langue préférée</Text>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-            <TouchableOpacity
-              style={[
-                commonStyles.buttonSecondary,
-                { flex: 1 },
-                language === 'fr' && { backgroundColor: colors.primary, borderColor: colors.primary }
-              ]}
-              onPress={() => setLanguage('fr')}
-            >
-              <Text style={[
-                commonStyles.buttonSecondaryText,
-                language === 'fr' && { color: colors.backgroundAlt }
-              ]}>
-                Français
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                commonStyles.buttonSecondary,
-                { flex: 1 },
-                language === 'nouchi' && { backgroundColor: colors.primary, borderColor: colors.primary }
-              ]}
-              onPress={() => setLanguage('nouchi')}
-            >
-              <Text style={[
-                commonStyles.buttonSecondaryText,
-                language === 'nouchi' && { color: colors.backgroundAlt }
-              ]}>
-                Nouchi FR
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={{ marginTop: 20 }}>
-          <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center' }}
-            onPress={() => setAcceptedTerms(!acceptedTerms)}
-          >
-            <View style={{
-              width: 20,
-              height: 20,
-              borderRadius: 4,
-              borderWidth: 2,
-              borderColor: acceptedTerms ? colors.primary : colors.border,
-              backgroundColor: acceptedTerms ? colors.primary : 'transparent',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginRight: 12,
-            }}>
-              {acceptedTerms && (
-                <Icon name="checkmark" size={12} color={colors.backgroundAlt} />
-              )}
-            </View>
-            <Text style={[commonStyles.text, { flex: 1, fontSize: 14 }]}>
-              J&apos;accepte les{' '}
-              <Text style={{ color: colors.primary, textDecorationLine: 'underline' }}>
-                conditions d&apos;utilisation
-              </Text>
-              {' '}et la{' '}
-              <Text style={{ color: colors.primary, textDecorationLine: 'underline' }}>
-                politique de confidentialité
-              </Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={[commonStyles.helperText, { marginTop: 16 }]}>
-          Ce nom sera visible par les autres membres de vos tontines.
-        </Text>
-      </View>
-
-      <View style={commonStyles.footer}>
-        <TouchableOpacity
-          style={[commonStyles.button, commonStyles.primaryButton]}
-          onPress={handleNextStep}
-        >
-          <Text style={commonStyles.buttonText}>Terminer</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={commonStyles.safeArea}>
-      <ScrollView style={commonStyles.scrollView} showsVerticalScrollIndicator={false}>
-        {currentStep === 1 && renderStep1()}
-        {currentStep === 2 && renderStep2()}
-        {currentStep === 3 && renderStep3()}
-      </ScrollView>
+    <SafeAreaView style={commonStyles.container}>
+      <KeyboardAvoidingView 
+        style={commonStyles.content} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {step === 'phone' && renderPhoneStep()}
+        {step === 'otp' && renderOtpStep()}
+        {step === 'profile' && renderProfileStep()}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
